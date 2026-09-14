@@ -14,6 +14,8 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.LinkOption;
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Properties;
@@ -31,43 +33,73 @@ public final class InstallService {
     public InstallService(ReleaseService releaseService) { this.releaseService = releaseService; }
 
     public Path install(ReleaseInfo release, Path root, ProgressListener listener) throws Exception {
-        Path versions = root.resolve("versions");
+        if (release.version() == null || !release.version().matches("[A-Za-z0-9][A-Za-z0-9._+-]*")) {
+            throw new IOException("Invalid release version");
+        }
+        Path versions = root.toAbsolutePath().normalize().resolve("versions");
         Files.createDirectories(versions);
         Path temp = Files.createTempFile("openttd-", ".zip");
         Path target = versions.resolve(release.channel().name().toLowerCase(Locale.ROOT) + "-" + release.version());
+        Path staging = null;
+        Path backup = null;
         try {
             listener.update("Downloading " + release.label(), 0, 1);
             HttpRequest request = HttpRequest.newBuilder(release.downloadUri()).header("User-Agent", "OpenTTD-Launcher/1.0").GET().build();
             HttpResponse<InputStream> response = releaseService.client().send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() / 100 != 2) throw new IOException("Download failed with HTTP " + response.statusCode());
+            if (response.statusCode() / 100 != 2) {
+                response.body().close();
+                throw new IOException("Download failed with HTTP " + response.statusCode());
+            }
             long total = response.headers().firstValueAsLong("Content-Length").orElse(-1);
             copy(response.body(), temp, total, listener);
-            if (Files.exists(target)) deleteTree(target);
-            Files.createDirectories(target);
+            staging = Files.createTempDirectory(versions, ".install-");
             listener.update("Extracting files", 0, 1);
-            extract(temp, target, release.downloadUri().getPath());
-            Path executable = findExecutable(target);
+            extract(temp, staging, release.downloadUri().getPath());
+            Path executable = findExecutable(staging);
             if (executable == null) throw new IOException("The archive did not contain an OpenTTD executable");
             executable.toFile().setExecutable(true, false);
             Properties manifest = new Properties();
             manifest.setProperty("channel", release.channel().name());
             manifest.setProperty("version", release.version());
-            try (var out = Files.newOutputStream(target.resolve(".launcher.properties"))) { manifest.store(out, "OpenTTD Launcher managed version"); }
+            try (var out = Files.newOutputStream(staging.resolve(".launcher.properties"))) { manifest.store(out, "OpenTTD Launcher managed version"); }
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                backup = versions.resolve(".backup-" + java.util.UUID.randomUUID());
+                Files.move(target, backup);
+            }
+            try {
+                Files.move(staging, target);
+                staging = null;
+            } catch (IOException failure) {
+                if (backup != null) {
+                    try { Files.move(backup, target); backup = null; }
+                    catch (IOException rollback) { failure.addSuppressed(rollback); }
+                }
+                throw failure;
+            }
+            if (backup != null) {
+                try { deleteTree(backup); }
+                catch (IOException cleanup) { /* Preserve the backup if it is still in use. */ }
+            }
             listener.update("Installed " + release.label(), 1, 1);
             return target;
-        } finally { Files.deleteIfExists(temp); }
+        } finally {
+            try { if (staging != null) deleteTree(staging); }
+            finally { Files.deleteIfExists(temp); }
+        }
     }
 
     public InstalledVersion findInstalled(Path root, ReleaseChannel channel) throws IOException {
         Path versions = root.resolve("versions");
-        if (!Files.isDirectory(versions)) return null;
-        InstalledVersion managed;
+        InstalledVersion managed = null;
+        if (Files.isDirectory(versions)) {
         try (Stream<Path> paths = Files.list(versions)) {
-            managed = paths.filter(Files::isDirectory).map(path -> readInstalled(path, channel)).filter(java.util.Objects::nonNull)
+            managed = paths.filter(path -> !path.getFileName().toString().startsWith("."))
+                    .filter(Files::isDirectory).map(path -> readInstalled(path, channel)).filter(java.util.Objects::nonNull)
                     .max(Comparator.comparing(InstalledVersion::version, InstallService::compareVersions)).orElse(null);
         }
+        }
         if (managed != null) return managed;
-        Path externalExecutable = findExecutable(root);
+        Path externalExecutable = findExecutable(root, versions);
         if (externalExecutable == null) return null;
         return new InstalledVersion(channel, detectVersion(externalExecutable), root, externalExecutable);
     }
@@ -81,13 +113,29 @@ public final class InstallService {
             if (!Files.exists(marker)) return null;
             try (var in = Files.newInputStream(marker)) { properties.load(in); }
             if (!channel.name().equals(properties.getProperty("channel"))) return null;
+            if (properties.getProperty("version", "").isBlank()) return null;
             Path executable = findExecutable(path);
             return executable == null ? null : new InstalledVersion(channel, properties.getProperty("version"), path, executable);
         } catch (IOException e) { return null; }
     }
 
-    private static int compareVersions(String left, String right) {
-        return left.compareToIgnoreCase(right);
+    static int compareVersions(String left, String right) {
+        Matcher a = Pattern.compile("[0-9]+|[^0-9]+").matcher(left);
+        Matcher b = Pattern.compile("[0-9]+|[^0-9]+").matcher(right);
+        while (true) {
+            boolean hasA = a.find(), hasB = b.find();
+            if (!hasA || !hasB) {
+                if (hasA == hasB) return 0;
+                // A final release follows its beta/RC versions.
+                String remainder = hasA ? left.substring(a.start()) : right.substring(b.start());
+                int order = remainder.matches("(?i)[-._]?(alpha|beta|rc).*" ) ? -1 : 1;
+                return hasA ? order : -order;
+            }
+            String x = a.group(), y = b.group();
+            int order = Character.isDigit(x.charAt(0)) && Character.isDigit(y.charAt(0))
+                    ? new BigInteger(x).compareTo(new BigInteger(y)) : x.compareToIgnoreCase(y);
+            if (order != 0) return order;
+        }
     }
 
     private static String detectVersion(Path executable) {
@@ -105,8 +153,14 @@ public final class InstallService {
     }
 
     private static Path findExecutable(Path root) throws IOException {
+        return findExecutable(root, null);
+    }
+
+    private static Path findExecutable(Path root, Path excluded) throws IOException {
+        if (!Files.isDirectory(root)) return null;
         try (Stream<Path> paths = Files.walk(root, 4)) {
-            return paths.filter(Files::isRegularFile).filter(path -> {
+            return paths.filter(path -> excluded == null || !path.startsWith(excluded))
+                    .filter(Files::isRegularFile).filter(path -> {
                 String name = path.getFileName().toString();
                 return name.equalsIgnoreCase("openttd.exe") || name.equals("openttd");
             }).findFirst().orElse(null);
@@ -116,7 +170,11 @@ public final class InstallService {
     private static void copy(InputStream input, Path target, long total, ProgressListener listener) throws IOException {
         try (input; var output = Files.newOutputStream(target)) {
             byte[] buffer = new byte[64 * 1024]; long count = 0; int read;
-            while ((read = input.read(buffer)) >= 0) { output.write(buffer, 0, read); count += read; listener.update("Downloading archive", count, total); }
+            while ((read = input.read(buffer)) >= 0) {
+                if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Download interrupted");
+                output.write(buffer, 0, read); count += read; listener.update("Downloading archive", count, total);
+            }
+            if (total >= 0 && count != total) throw new IOException("The archive download was incomplete");
         }
     }
 
@@ -142,7 +200,8 @@ public final class InstallService {
         Path normalizedTarget = target.toAbsolutePath().normalize();
         try (var input = new TarArchiveInputStream(new XZInputStream(Files.newInputStream(archive)))) {
             TarArchiveEntry entry;
-            while ((entry = (TarArchiveEntry) input.getNextEntry()) != null) {
+            while ((entry = input.getNextEntry()) != null) {
+                if (!entry.isDirectory() && !entry.isFile()) throw new IOException("Unsupported archive entry: " + entry.getName());
                 Path destination = normalizedTarget.resolve(entry.getName()).normalize();
                 if (!destination.startsWith(normalizedTarget)) throw new IOException("Unsafe archive entry: " + entry.getName());
                 if (entry.isDirectory()) Files.createDirectories(destination);
@@ -152,6 +211,8 @@ public final class InstallService {
     }
 
     private static void deleteTree(Path root) throws IOException {
-        try (Stream<Path> paths = Files.walk(root)) { paths.sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.delete(path); } catch (IOException e) { throw new RuntimeException(e); } }); }
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
+        }
     }
 }

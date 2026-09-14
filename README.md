@@ -24,6 +24,11 @@ On Windows, `scripts\\build.bat` builds the JAR and `scripts\\run.bat` starts it
 - The native archive for the current platform is downloaded from the official CDN and extracted into `<install directory>/versions/<channel>-<version>`.
 - User saves/configuration are not placed inside managed version folders. OpenTTD continues to use its normal user data location.
 - Launcher settings are saved to `.openttd-launcher.properties` inside the user's home directory.
-- Repair reinstalls the selected channel's latest version into a fresh managed folder.
+- Repair downloads and validates the replacement in a temporary folder before replacing the installed copy. Download or extraction failures leave the working installation intact; a failed replacement move attempts to restore the previous copy.
+- Installed versions are selected using numeric version ordering, with final releases preferred over their beta/RC builds. Other channels and temporary installation folders are excluded.
 
-The launcher intentionally uses ZIP archives instead of the installer so it can manage files without registry changes or an uninstall workflow.
+The launcher uses native ZIP or tar.xz archives so it can manage files without registry changes or an uninstall workflow.
+
+## Tests
+
+Run `mvn test` to check version selection, channel isolation, repair success and failure, and rejection of unsafe archive paths. Installation tests use a local HTTP server and temporary folders; they do not download OpenTTD or modify your installed game.
