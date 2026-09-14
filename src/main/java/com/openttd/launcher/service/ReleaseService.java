@@ -2,6 +2,7 @@ package com.openttd.launcher.service;
 
 import com.openttd.launcher.model.ReleaseChannel;
 import com.openttd.launcher.model.ReleaseInfo;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.net.URI;
@@ -23,8 +24,11 @@ public final class ReleaseService {
         HttpRequest request = HttpRequest.newBuilder(URI.create(channel.metadataUrl()))
                 .timeout(Duration.ofSeconds(30)).header("User-Agent", "OpenTTD-Launcher/1.0").GET().build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() / 100 != 2) throw new IOException("OpenTTD returned HTTP " + response.statusCode());
+        if (response.statusCode() / 100 != 2) throw new IOException(channel.sourceName() + " returned HTTP " + response.statusCode()
+                + (channel == ReleaseChannel.JGRPP && (response.statusCode() == 403 || response.statusCode() == 429)
+                ? ". GitHub may be rate limiting requests; try again later." : ""));
         String assetSuffix = platformAssetSuffix();
+        if (channel == ReleaseChannel.JGRPP) return parseJgrRelease(response.body(), assetSuffix);
         Matcher matcher = ASSET.matcher(response.body());
         URI download = null;
         String assetName = null;
@@ -39,6 +43,30 @@ public final class ReleaseService {
         String suffix = "-" + assetSuffix + (assetName.endsWith(".tar.xz") ? ".tar.xz" : ".zip");
         String version = assetName.substring("openttd-".length(), assetName.length() - suffix.length());
         return new ReleaseInfo(channel, version, download, channel.metadataUrl());
+    }
+
+    static ReleaseInfo parseJgrRelease(String body, String platform) throws IOException {
+        try {
+            var release = JsonParser.parseString(body).getAsJsonObject();
+            String tag = release.get("tag_name").getAsString();
+            if (!tag.matches("jgrpp-[0-9][A-Za-z0-9._+-]*")) throw new IOException("Unrecognized JGR release tag: " + tag);
+            String version = tag.substring("jgrpp-".length());
+            String prefix = "openttd-jgrpp-" + version + "-" + platform;
+            for (var element : release.getAsJsonArray("assets")) {
+                var asset = element.getAsJsonObject();
+                String name = asset.get("name").getAsString();
+                if (!name.equals(prefix + ".zip") && !name.equals(prefix + ".tar.xz")) continue;
+                URI download = URI.create(asset.get("browser_download_url").getAsString());
+                String expected = "https://github.com/JGRennison/OpenTTD-patches/releases/download/" + tag + "/" + name;
+                if (!download.toString().equals(expected)) throw new IOException("Unexpected JGR download address");
+                return new ReleaseInfo(ReleaseChannel.JGRPP, version, download,
+                        "https://github.com/JGRennison/OpenTTD-patches/releases/tag/" + tag);
+            }
+            throw new IOException("JGR Patch Pack has no supported ZIP or tar.xz download for " + platform
+                    + ". Check github.com/JGRennison/OpenTTD-patches/releases for manual installation options.");
+        } catch (RuntimeException malformed) {
+            throw new IOException("Could not read JGR release metadata from GitHub", malformed);
+        }
     }
 
     private static String platformAssetSuffix() throws IOException {

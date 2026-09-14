@@ -100,13 +100,13 @@ public final class LauncherApp {
         JPanel copy = new JPanel(new GridLayout(2, 1, 0, 3)); copy.setOpaque(false); copy.add(title); copy.add(subtitle); panel.add(copy, BorderLayout.WEST);
         channelBox.setSelectedItem(settings.channel()); channelBox.setBackground(PANEL_ALT); channelBox.setForeground(TEXT); channelBox.setFont(new Font("Segoe UI", Font.PLAIN, 14)); channelBox.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
         channelBox.addActionListener(e -> { settings.channel((ReleaseChannel) channelBox.getSelectedItem()); refreshInstalled(); checkLatest(); });
-        JPanel selector = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); selector.setOpaque(false); selector.add(label("CHANNEL")); selector.add(channelBox); panel.add(selector, BorderLayout.EAST);
+        JPanel selector = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); selector.setOpaque(false); selector.add(label("CHANNEL")); selector.add(channelBox); panel.add(selector, BorderLayout.SOUTH);
         return panel;
     }
 
     private JPanel summary() {
         JPanel panel = new JPanel(new GridLayout(1, 3, 12, 0)); panel.setOpaque(false);
-        panel.add(infoCard("INSTALLED", installedValue, "Detected in managed versions")); panel.add(infoCard("LATEST AVAILABLE", latestValue, "From openttd.org")); panel.add(infoCard("INSTALL LOCATION", directoryValue, "User data stays separate"));
+        panel.add(infoCard("INSTALLED", installedValue, "Detected in managed versions")); panel.add(infoCard("LATEST AVAILABLE", latestValue, "From the selected release source")); panel.add(infoCard("INSTALL LOCATION", directoryValue, "User data stays separate"));
         return panel;
     }
 
@@ -155,8 +155,9 @@ public final class LauncherApp {
         if (busy) return;
         latest = null;
         latestValue.setText("Checking...");
-        setBusy(true, "Checking official releases..."); log("Checking " + ((ReleaseChannel) channelBox.getSelectedItem()).displayName() + " on openttd.org");
+        setBusy(true, "Checking releases...");
         ReleaseChannel channel = (ReleaseChannel) channelBox.getSelectedItem();
+        log("Checking " + channel.displayName() + " on " + channel.sourceName());
         worker.submit(() -> { try { ReleaseInfo result = releaseService.fetchLatest(channel); SwingUtilities.invokeLater(() -> { latest = result; latestValue.setText(result.version()); log("Latest release: " + result.label()); setBusy(false, "Ready"); status(installed != null && installed.version().equals(result.version()) ? "Up to date" : "Release available", SUCCESS); }); } catch (Exception ex) { SwingUtilities.invokeLater(() -> { latestValue.setText("Unavailable"); failure("Could not check releases", ex); }); } });
     }
 

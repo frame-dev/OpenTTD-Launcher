@@ -1,6 +1,6 @@
 # OpenTTD Launcher
 
-A small Java 21/Swing launcher for the official OpenTTD releases on Windows, macOS, and Linux. It checks the official OpenTTD download pages, installs native releases into versioned managed folders, and launches the selected game without touching user saves or configuration.
+A small Java 21/Swing launcher for official OpenTTD releases and JGR's Patch Pack. It checks release sources, installs native releases into versioned managed folders, and launches the selected game without touching user saves or configuration.
 
 ## Requirements
 
@@ -21,6 +21,8 @@ On Windows, `scripts\\build.bat` builds the JAR and `scripts\\run.bat` starts it
 ## Behavior
 
 - Stable, Testing, and Nightly metadata is read from the official OpenTTD pages.
+- JGR Patch Pack reads the latest release from [JGRennison/OpenTTD-patches](https://github.com/JGRennison/OpenTTD-patches/releases). Select it in the channel menu to install, update, repair, or launch it independently of official releases. Its selection is remembered across restarts.
+- JGR automatic installation supports published Windows x64/ARM64 ZIPs and Linux x64 generic tar.xz archives. macOS DMG files and platforms without a matching archive require manual installation. GitHub metadata and downloads require access to `api.github.com`, `github.com`, and GitHub's release asset hosts; API rate limits can temporarily prevent update checks.
 - The native archive for the current platform is downloaded from the official CDN and extracted into `<install directory>/versions/<channel>-<version>`.
 - User saves/configuration are not placed inside managed version folders. OpenTTD continues to use its normal user data location.
 - Launcher settings are saved to `.openttd-launcher.properties` inside the user's home directory.

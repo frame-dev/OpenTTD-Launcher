@@ -43,6 +43,13 @@ class InstallServiceTest {
         assertNull(service.findInstalled(root, ReleaseChannel.NIGHTLY));
     }
 
+    @Test void keepsJgrAndOfficialInstallationsSeparate() throws Exception {
+        managed("stable-14.0", "14.0", ReleaseChannel.STABLE);
+        managed("jgrpp-0.73.2", "0.73.2", ReleaseChannel.JGRPP);
+        assertEquals("0.73.2", service.findInstalled(root, ReleaseChannel.JGRPP).version());
+        assertEquals("14.0", service.findInstalled(root, ReleaseChannel.STABLE).version());
+    }
+
     @Test void ignoresIncompleteManifest() throws Exception {
         Path directory = managed("stable-broken", "", ReleaseChannel.STABLE);
         assertTrue(Files.exists(directory));
