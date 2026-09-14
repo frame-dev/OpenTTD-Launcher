@@ -1,0 +1,8 @@
+/target/
+/.vscode/
+/.idea/
+/.github/modernize/
+*.iml
+*.log
+.DS_Store
+Thumbs.db
