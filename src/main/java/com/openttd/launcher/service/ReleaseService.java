@@ -14,6 +14,75 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class ReleaseService {
+    public record HistoryPage(java.util.List<ReleaseInfo> releases, boolean hasMore) {}
+    private static final String CDN = "https://cdn.openttd.org/";
+
+    private String read(String url) throws IOException, InterruptedException {
+        var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30))
+                .header("User-Agent", "OpenTTD-Launcher/1.0").GET().build();
+        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) throw new IOException("Release source returned HTTP " + response.statusCode() + ". Please try again later.");
+        return response.body();
+    }
+
+    public HistoryPage fetchHistory(ReleaseChannel channel, int page) throws IOException, InterruptedException {
+        if (page < 0) throw new IllegalArgumentException("Invalid history page");
+        if (channel == ReleaseChannel.JGRPP) {
+            var entries = JsonParser.parseString(read("https://api.github.com/repos/JGRennison/OpenTTD-patches/releases?per_page=30&page=" + (page + 1))).getAsJsonArray();
+            var releases = new java.util.ArrayList<ReleaseInfo>();
+            for (var entry : entries) {
+                var object = entry.getAsJsonObject();
+                if (object.has("draft") && object.get("draft").getAsBoolean()) continue;
+                try { releases.add(parseJgrRelease(entry.toString(), platformAssetSuffix())); }
+                catch (IOException unsupported) { /* Older releases may not have a compatible archive. */ }
+            }
+            return new HistoryPage(releases, entries.size() == 30);
+        }
+        String base = CDN + (channel == ReleaseChannel.NIGHTLY ? "openttd-nightlies/" : "openttd-releases/");
+        if (channel == ReleaseChannel.NIGHTLY) {
+            var years = directories(read(base)).stream().filter(v -> v.matches("[0-9]{4}"))
+                    .sorted(java.util.Comparator.reverseOrder()).toList();
+            if (page >= years.size()) return new HistoryPage(java.util.List.of(), false);
+            base += years.get(page) + "/";
+            return new HistoryPage(parseOfficialHistory(read(base), channel, base), page + 1 < years.size());
+        }
+        return new HistoryPage(parseOfficialHistory(read(base), channel, base), false);
+    }
+
+    static java.util.List<String> directories(String html) {
+        var result = new java.util.LinkedHashSet<String>();
+        var matcher = Pattern.compile("href=\"([A-Za-z0-9][A-Za-z0-9._+-]*)/\"").matcher(html);
+        while (matcher.find()) result.add(matcher.group(1));
+        return java.util.List.copyOf(result);
+    }
+
+    static java.util.List<ReleaseInfo> parseOfficialHistory(String html, ReleaseChannel channel, String base) {
+        return directories(html).stream().filter(version -> switch (channel) {
+            case STABLE -> version.matches("[0-9]+(?:\\.[0-9]+)+");
+            case TESTING -> version.matches("(?i)[0-9]+(?:\\.[0-9]+)+-(?:beta|RC)[0-9]+");
+            case NIGHTLY -> version.matches("(?:[0-9]{8}-[A-Za-z0-9._+-]+|r[0-9]+)");
+            default -> false;
+        }).sorted((a, b) -> InstallService.compareVersions(b, a))
+                .map(version -> new ReleaseInfo(channel, version, null, base + version + "/")).toList();
+    }
+
+    public ReleaseInfo resolveDownload(ReleaseInfo release) throws IOException, InterruptedException {
+        if (release.downloadUri() != null) return release;
+        if (release.pageUri() == null) throw new IOException("Load older versions to find a download for this installed version.");
+        return parseArchive(read(release.pageUri()), release, platformAssetSuffix());
+    }
+
+    static ReleaseInfo parseArchive(String html, ReleaseInfo release, String platform) throws IOException {
+        var matcher = Pattern.compile("href=\"([^\"]+)\"").matcher(html);
+        String prefix = "openttd-" + release.version() + "-" + platform;
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            if (name.equals(prefix + ".zip") || name.equals(prefix + ".tar.xz")) {
+                return new ReleaseInfo(release.channel(), release.version(), URI.create(release.pageUri()).resolve(name), release.pageUri());
+            }
+        }
+        throw new IOException("No supported archive for " + platform + " in release " + release.version());
+    }
     private static final Pattern ASSET = Pattern.compile(
             "https://cdn\\.openttd\\.org/(openttd-releases|openttd-nightlies)/(?:[^/]+/)*(openttd-[^/\\\"<>]+-(?:windows-win64|windows-arm64|linux-generic-amd64|linux-generic-arm64|macos-universal)\\.(?:zip|tar\\.xz))",
             Pattern.CASE_INSENSITIVE);

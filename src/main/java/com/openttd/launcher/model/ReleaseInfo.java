@@ -4,4 +4,5 @@ import java.net.URI;
 
 public record ReleaseInfo(ReleaseChannel channel, String version, URI downloadUri, String pageUri) {
     public String label() { return channel.displayName() + " " + version; }
+    @Override public String toString() { return version; }
 }

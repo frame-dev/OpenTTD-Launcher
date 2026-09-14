@@ -106,6 +106,16 @@ public final class InstallService {
 
     public Path executable(Path directory) throws IOException { return findExecutable(directory); }
 
+    public java.util.List<InstalledVersion> listInstalled(Path root, ReleaseChannel channel) throws IOException {
+        Path versions = root.resolve("versions");
+        if (!Files.isDirectory(versions)) return java.util.List.of();
+        try (var paths = Files.list(versions)) {
+            return paths.filter(path -> !path.getFileName().toString().startsWith("."))
+                    .map(path -> readInstalled(path, channel)).filter(java.util.Objects::nonNull)
+                    .sorted((a, b) -> compareVersions(b.version(), a.version())).toList();
+        }
+    }
+
     private InstalledVersion readInstalled(Path path, ReleaseChannel channel) {
         try {
             Properties properties = new Properties();

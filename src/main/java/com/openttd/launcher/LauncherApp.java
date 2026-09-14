@@ -50,6 +50,11 @@ public final class LauncherApp {
         Thread thread = new Thread(r, "openttd-launcher-worker"); thread.setDaemon(true); return thread;
     });
     private final JComboBox<ReleaseChannel> channelBox = new JComboBox<>(ReleaseChannel.values());
+    private final JComboBox<ReleaseInfo> versionBox = new JComboBox<>();
+    private final JButton historyButton = button("Older versions");
+    private int historyPage;
+    private boolean moreHistory = true;
+    private boolean changingVersions;
     private final JLabel installedValue = valueLabel("Not installed");
     private final JLabel latestValue = valueLabel("Not checked");
     private final JLabel directoryValue = valueLabel("");
@@ -81,7 +86,7 @@ public final class LauncherApp {
         frame.addWindowListener(new WindowAdapter() { @Override public void windowClosed(WindowEvent e) { worker.shutdownNow(); } });
         frame.setVisible(true);
         refreshDirectory();
-        refreshInstalled();
+        resetVersions();
         checkLatest();
     }
 
@@ -99,8 +104,17 @@ public final class LauncherApp {
         JLabel subtitle = new JLabel("Keep your railway empire moving"); subtitle.setForeground(MUTED); subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         JPanel copy = new JPanel(new GridLayout(2, 1, 0, 3)); copy.setOpaque(false); copy.add(title); copy.add(subtitle); panel.add(copy, BorderLayout.WEST);
         channelBox.setSelectedItem(settings.channel()); channelBox.setBackground(PANEL_ALT); channelBox.setForeground(TEXT); channelBox.setFont(new Font("Segoe UI", Font.PLAIN, 14)); channelBox.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
-        channelBox.addActionListener(e -> { settings.channel((ReleaseChannel) channelBox.getSelectedItem()); refreshInstalled(); checkLatest(); });
-        JPanel selector = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); selector.setOpaque(false); selector.add(label("CHANNEL")); selector.add(channelBox); panel.add(selector, BorderLayout.SOUTH);
+        channelBox.addActionListener(e -> { settings.channel((ReleaseChannel) channelBox.getSelectedItem()); resetVersions(); checkLatest(); });
+        JPanel selector = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); selector.setOpaque(false); selector.add(label("CHANNEL")); selector.add(channelBox);
+        versionBox.setPreferredSize(new Dimension(235, 34));
+        versionBox.setMaximumRowCount(15);
+        versionBox.setBackground(PANEL_ALT); versionBox.setForeground(TEXT);
+        versionBox.addActionListener(e -> { if (!changingVersions) refreshInstalled(); });
+        historyButton.addActionListener(e -> loadHistory());
+        JPanel versions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8)); versions.setOpaque(false);
+        versions.add(label("VERSION")); versions.add(versionBox); versions.add(historyButton);
+        JPanel selectors = new JPanel(new GridLayout(2, 1)); selectors.setOpaque(false);
+        selectors.add(selector); selectors.add(versions); panel.add(selectors, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -135,20 +149,71 @@ public final class LauncherApp {
         JPanel primary = new JPanel(new GridLayout(1, 4, 10, 0));
         primary.setOpaque(false);
         installButton.addActionListener(e -> install(false));
-        updateButton.addActionListener(e -> install(false));
+        updateButton.addActionListener(e -> { if (latest != null) { mergeVersions(java.util.List.of(latest)); versionBox.setSelectedItem(latest); install(false); } });
         repairButton.addActionListener(e -> install(true));
         launchButton.addActionListener(e -> launch());
         launchButton.setBackground(ACCENT);
         launchButton.setForeground(BACKGROUND);
         launchButton.setOpaque(true);
         launchButton.setToolTipText("Play the installed version, even when offline");
-        repairButton.setToolTipText("Download and reinstall the latest release for this channel");
+        repairButton.setToolTipText("Download and reinstall the selected version");
         primary.add(installButton);
         primary.add(updateButton);
         primary.add(repairButton);
         primary.add(launchButton);
         panel.add(primary, BorderLayout.SOUTH);
         return panel;
+    }
+
+    private void resetVersions() {
+        latest = null;
+        historyPage = 0;
+        moreHistory = true;
+        historyButton.setText("Older versions");
+        changingVersions = true;
+        versionBox.removeAllItems();
+        changingVersions = false;
+        try {
+            var channel = (ReleaseChannel) channelBox.getSelectedItem();
+            mergeVersions(installService.listInstalled(settings.installRoot(), channel).stream()
+                    .map(v -> new ReleaseInfo(channel, v.version(), null, null)).toList());
+        } catch (IOException ex) { log("Could not list installed versions: " + ex.getMessage()); }
+        refreshInstalled();
+    }
+
+    private void mergeVersions(java.util.List<ReleaseInfo> releases) {
+        ReleaseInfo previous = (ReleaseInfo) versionBox.getSelectedItem();
+        var all = new java.util.LinkedHashMap<String, ReleaseInfo>();
+        for (int i = 0; i < versionBox.getItemCount(); i++) {
+            var item = versionBox.getItemAt(i); all.put(item.version(), item);
+        }
+        for (var release : releases) all.put(release.version(), release);
+        changingVersions = true;
+        versionBox.removeAllItems();
+        for (var release : all.values()) versionBox.addItem(release);
+        if (previous != null) versionBox.setSelectedItem(all.get(previous.version()));
+        changingVersions = false;
+    }
+
+    private void loadHistory() {
+        if (busy || !moreHistory) return;
+        var channel = (ReleaseChannel) channelBox.getSelectedItem();
+        int page = historyPage;
+        setBusy(true, "Loading older versions...");
+        worker.submit(() -> {
+            try {
+                var result = releaseService.fetchHistory(channel, page);
+                SwingUtilities.invokeLater(() -> {
+                    mergeVersions(result.releases());
+                    historyPage++;
+                    moreHistory = result.hasMore();
+                    historyButton.setText(moreHistory ? "Load more" : "History loaded");
+                    refreshInstalled();
+                    setBusy(false, "Ready");
+                    log("Loaded " + result.releases().size() + " historical versions for " + channel.displayName());
+                });
+            } catch (Exception ex) { SwingUtilities.invokeLater(() -> failure("Could not load older versions", ex)); }
+        });
     }
 
     private void checkLatest() {
@@ -158,16 +223,16 @@ public final class LauncherApp {
         setBusy(true, "Checking releases...");
         ReleaseChannel channel = (ReleaseChannel) channelBox.getSelectedItem();
         log("Checking " + channel.displayName() + " on " + channel.sourceName());
-        worker.submit(() -> { try { ReleaseInfo result = releaseService.fetchLatest(channel); SwingUtilities.invokeLater(() -> { latest = result; latestValue.setText(result.version()); log("Latest release: " + result.label()); setBusy(false, "Ready"); status(installed != null && installed.version().equals(result.version()) ? "Up to date" : "Release available", SUCCESS); }); } catch (Exception ex) { SwingUtilities.invokeLater(() -> { latestValue.setText("Unavailable"); failure("Could not check releases", ex); }); } });
+        worker.submit(() -> { try { ReleaseInfo result = releaseService.fetchLatest(channel); SwingUtilities.invokeLater(() -> { latest = result; latestValue.setText(result.version()); mergeVersions(java.util.List.of(result)); refreshInstalled(); log("Latest release: " + result.label()); setBusy(false, "Ready"); status(installed != null && installed.version().equals(result.version()) ? "Up to date" : "Release available", SUCCESS); }); } catch (Exception ex) { SwingUtilities.invokeLater(() -> { latestValue.setText("Unavailable"); failure("Could not check releases", ex); }); } });
     }
 
     private void install(boolean repair) {
         if (busy) return;
-        if (latest == null) { checkLatest(); return; }
-        if (!repair && installed != null && installed.version().equals(latest.version())) { log("Already on the latest version."); return; }
-        ReleaseInfo release = latest;
+        ReleaseInfo release = (ReleaseInfo) versionBox.getSelectedItem();
+        if (release == null) return;
+        if (!repair && installed != null) { log("Selected version is already installed."); return; }
         Path root = settings.installRoot(); setBusy(true, repair ? "Repairing..." : "Installing..."); progress.setValue(0);
-        worker.submit(() -> { try { Path result = installService.install(release, root, (message, complete, total) -> SwingUtilities.invokeLater(() -> { status(message, TEXT); if (total > 0) { progress.setIndeterminate(false); progress.setMaximum((int) Math.min(Integer.MAX_VALUE, total)); progress.setValue((int) Math.min(Integer.MAX_VALUE, complete)); progress.setString(total == 1 ? message : formatBytes(complete) + " / " + formatBytes(total)); } else { progress.setIndeterminate(true); progress.setString(message); } })); SwingUtilities.invokeLater(() -> { log("Installed to " + result); refreshInstalled(); setBusy(false, "Ready"); status("Install complete", SUCCESS); }); } catch (Exception ex) { SwingUtilities.invokeLater(() -> failure("Installation failed", ex)); } });
+        worker.submit(() -> { try { Path result = installService.install(releaseService.resolveDownload(release), root, (message, complete, total) -> SwingUtilities.invokeLater(() -> { status(message, TEXT); if (total > 0) { progress.setIndeterminate(false); progress.setMaximum((int) Math.min(Integer.MAX_VALUE, total)); progress.setValue((int) Math.min(Integer.MAX_VALUE, complete)); progress.setString(total == 1 ? message : formatBytes(complete) + " / " + formatBytes(total)); } else { progress.setIndeterminate(true); progress.setString(message); } })); SwingUtilities.invokeLater(() -> { log("Installed to " + result); refreshInstalled(); setBusy(false, "Ready"); status("Install complete", SUCCESS); }); } catch (Exception ex) { SwingUtilities.invokeLater(() -> failure("Installation failed", ex)); } });
     }
 
     private void launch() {
@@ -175,11 +240,13 @@ public final class LauncherApp {
         try { new ProcessBuilder(installed.executable().toString()).directory(installed.directory().toFile()).start(); log("Launched " + installed.label()); status("Game running", SUCCESS); } catch (IOException ex) { failure("Could not launch OpenTTD", ex); }
     }
 
-    private void chooseFolder() { JFileChooser chooser = new JFileChooser(settings.installRoot().toFile()); chooser.setDialogTitle("Choose OpenTTD install directory"); chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY); if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) { settings.installRoot(chooser.getSelectedFile().toPath()); refreshDirectory(); refreshInstalled(); log("Install directory changed."); } }
+    private void chooseFolder() { JFileChooser chooser = new JFileChooser(settings.installRoot().toFile()); chooser.setDialogTitle("Choose OpenTTD install directory"); chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY); if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) { settings.installRoot(chooser.getSelectedFile().toPath()); refreshDirectory(); resetVersions(); checkLatest(); log("Install directory changed."); } }
     private void refreshDirectory() { directoryValue.setText(shorten(settings.installRoot().toString(), 24)); directoryValue.setToolTipText(settings.installRoot().toString()); }
     private void refreshInstalled() {
         try {
-            installed = installService.findInstalled(settings.installRoot(), (ReleaseChannel) channelBox.getSelectedItem());
+            ReleaseInfo selected = (ReleaseInfo) versionBox.getSelectedItem();
+            installed = selected == null ? null : installService.listInstalled(settings.installRoot(), (ReleaseChannel) channelBox.getSelectedItem())
+                    .stream().filter(v -> v.version().equals(selected.version())).findFirst().orElse(null);
             installedValue.setText(installed == null ? "Not installed" : installed.version());
         } catch (IOException e) {
             installed = null;
@@ -190,13 +257,16 @@ public final class LauncherApp {
     }
 
     private void refreshActions() {
-        boolean available = latest != null && latest.channel() == channelBox.getSelectedItem();
-        boolean current = available && installed != null && installed.version().equals(latest.version());
+        ReleaseInfo selected = (ReleaseInfo) versionBox.getSelectedItem();
+        boolean available = selected != null && selected.channel() == channelBox.getSelectedItem() && selected.pageUri() != null;
+        boolean current = latest != null && installed != null && installed.version().equals(latest.version());
+        versionBox.setEnabled(!busy && versionBox.getItemCount() > 0);
+        historyButton.setEnabled(!busy && moreHistory);
         checkButton.setEnabled(!busy);
         channelBox.setEnabled(!busy);
         folderButton.setEnabled(!busy);
         installButton.setEnabled(!busy && available && installed == null);
-        updateButton.setEnabled(!busy && available && installed != null && !current);
+        updateButton.setEnabled(!busy && latest != null && installed != null && !current);
         repairButton.setEnabled(!busy && available && installed != null);
         launchButton.setEnabled(!busy && installed != null);
     }

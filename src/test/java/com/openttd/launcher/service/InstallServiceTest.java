@@ -34,6 +34,8 @@ class InstallServiceTest {
         managed("stable-9.0", "9.0", ReleaseChannel.STABLE);
         managed("stable-14.0", "14.0", ReleaseChannel.STABLE);
         assertEquals("14.0", service.findInstalled(root, ReleaseChannel.STABLE).version());
+        assertEquals(java.util.List.of("14.0", "9.0"), service.listInstalled(root, ReleaseChannel.STABLE)
+                .stream().map(com.openttd.launcher.model.InstalledVersion::version).toList());
     }
 
     @Test void ignoresOtherChannelsAndTemporaryFolders() throws Exception {
