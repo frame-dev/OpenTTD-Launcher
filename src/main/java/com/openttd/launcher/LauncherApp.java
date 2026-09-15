@@ -7,6 +7,7 @@ import com.openttd.launcher.service.InstallService;
 import com.openttd.launcher.service.ReleaseService;
 import com.openttd.launcher.service.Settings;
 import com.openttd.launcher.service.TtdDataService;
+import com.openttd.launcher.service.MacDmgInstaller;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -253,8 +254,8 @@ public final class LauncherApp {
                 ttdDataService.ensureForLaunch(root, target.executable(), (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));
-                Process process = new ProcessBuilder(target.executable().toString())
-                        .directory(target.executable().toAbsolutePath().getParent().toFile())
+                Process process = new ProcessBuilder(MacDmgInstaller.launchCommand(target.executable()))
+                        .directory(MacDmgInstaller.workingDirectory(target.executable()).toFile())
                         .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
                 SwingUtilities.invokeLater(() -> {
                     setBusy(false, "Launch requested");

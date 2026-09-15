@@ -38,7 +38,7 @@ public final class InstallService {
         }
         Path versions = root.toAbsolutePath().normalize().resolve("versions");
         Files.createDirectories(versions);
-        Path temp = Files.createTempFile("openttd-", ".zip");
+        Path temp = Files.createTempFile("openttd-", release.downloadUri().getPath().endsWith(".dmg") ? ".dmg" : ".archive");
         Path target = versions.resolve(release.channel().name().toLowerCase(Locale.ROOT) + "-" + release.version());
         Path staging = null;
         Path backup = null;
@@ -189,7 +189,8 @@ public final class InstallService {
         }
     }
 
-    private static void extract(Path archive, Path target, String archivePath) throws IOException {
+    private static void extract(Path archive, Path target, String archivePath) throws IOException, InterruptedException {
+        if (archivePath.toLowerCase(Locale.ROOT).endsWith(".dmg")) { new MacDmgInstaller().install(archive, target); return; }
         if (archivePath.toLowerCase(Locale.ROOT).endsWith(".tar.xz")) extractTarXz(archive, target);
         else extractZip(archive, target);
     }

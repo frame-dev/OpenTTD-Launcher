@@ -37,9 +37,10 @@ class JgrReleaseTest {
         assertThrows(IOException.class, () -> ReleaseService.parseJgrRelease(metadata("windows-win64.zip"), "windows-arm64"));
     }
 
-    @Test void explainsUnsupportedDiskImage() {
-        var failure = assertThrows(IOException.class, () -> ReleaseService.parseJgrRelease(metadata("macos-universal.dmg"), "macos-universal"));
-        assertTrue(failure.getMessage().contains("manual installation"));
+    @Test void selectsMacDiskImage() throws Exception {
+        var release = ReleaseService.parseJgrRelease(metadata("macos-universal.dmg"), "macos-universal");
+        assertTrue(release.downloadUri().toString().endsWith("macos-universal.dmg"));
+        assertEquals("0.73.2", release.version());
     }
 
     @Test void rejectsMalformedMetadataAndUnexpectedDownloadHost() {

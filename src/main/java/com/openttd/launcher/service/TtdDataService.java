@@ -87,7 +87,7 @@ public final class TtdDataService {
     }
 
     static boolean legacyLayout(Path executable) throws IOException {
-        Path data = executable.toAbsolutePath().getParent().resolve("data");
+        Path data = MacDmgInstaller.workingDirectory(executable).resolve("data");
         if (!Files.isRegularFile(data.resolve("openttd.grf"))) return false;
         try (var files = Files.walk(data, 2)) {
             return files.noneMatch(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".obg"));
@@ -96,7 +96,7 @@ public final class TtdDataService {
 
     public void ensureForLaunch(Path root, Path executable, InstallService.ProgressListener progress) throws Exception {
         boolean legacy = legacyLayout(executable);
-        Path data = executable.toAbsolutePath().getParent().resolve("data");
+        Path data = MacDmgInstaller.workingDirectory(executable).resolve("data");
         if (legacy && !complete(data)) {
             progress.update("This version needs original TTD files. Preparing them...", 0, -1);
             prepare(root, progress);
@@ -108,7 +108,7 @@ public final class TtdDataService {
     public void applyCached(Path root, Path executable) throws IOException {
         Path cache = root.resolve("ttd-data");
         if (!complete(cache)) return;
-        Path game = executable.toAbsolutePath().getParent();
+        Path game = MacDmgInstaller.workingDirectory(executable);
         for (String folder : java.util.List.of("data", "baseset")) {
             Path destination = game.resolve(folder);
             Files.createDirectories(destination);
