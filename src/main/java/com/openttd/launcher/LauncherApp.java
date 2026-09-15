@@ -8,6 +8,7 @@ import com.openttd.launcher.service.ReleaseService;
 import com.openttd.launcher.service.Settings;
 import com.openttd.launcher.service.TtdDataService;
 import com.openttd.launcher.service.MacDmgInstaller;
+import com.openttd.launcher.service.WindowsCompatibility;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -253,6 +254,8 @@ public final class LauncherApp {
             try {
                 String compatibility = MacDmgInstaller.launchCompatibility(target.executable());
                 if (compatibility != null) SwingUtilities.invokeLater(() -> log(compatibility));
+                String windowsCompatibility = WindowsCompatibility.launchCompatibility(target.executable());
+                if (windowsCompatibility != null) SwingUtilities.invokeLater(() -> log(windowsCompatibility));
                 ttdDataService.ensureForLaunch(root, target.executable(), (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));

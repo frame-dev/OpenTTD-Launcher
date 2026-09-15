@@ -70,6 +70,16 @@ class ReleaseHistoryTest {
         var release = new ReleaseInfo(ReleaseChannel.STABLE, "14.1", null, "https://cdn.openttd.org/openttd-releases/14.1/");
         var resolved = ReleaseService.parseArchive("<a href=\"openttd-14.1-windows-win64.zip\">download</a>", release, "windows-win64");
         assertEquals("https://cdn.openttd.org/openttd-releases/14.1/openttd-14.1-windows-win64.zip", resolved.downloadUri().toString());
-        assertThrows(IOException.class, () -> ReleaseService.parseArchive("<a href=\"openttd-14.1-windows-win64.zip\">download</a>", release, "windows-arm64"));
+        assertThrows(IOException.class, () -> ReleaseService.parseArchive("<a href=\"openttd-14.1-windows-win64.zip\">download</a>", release, "windows-arm64-win10"));
+    }
+
+    @Test void windowsArmSelectsNativeThenSupportedEmulation() throws Exception {
+        var release = new ReleaseInfo(ReleaseChannel.STABLE, "14.1", null, "https://cdn.openttd.org/openttd-releases/14.1/");
+        String x86 = "<a href=\"openttd-14.1-windows-win32.zip\">file</a>";
+        String x64 = "<a href=\"openttd-14.1-windows-win64.zip\">file</a>";
+        String arm = "<a href=\"openttd-14.1-windows-arm64.zip\">file</a>";
+        assertTrue(ReleaseService.parseArchive(x86 + x64 + arm, release, "windows-arm64").downloadUri().toString().endsWith("arm64.zip"));
+        assertTrue(ReleaseService.parseArchive(x86 + x64, release, "windows-arm64").downloadUri().toString().endsWith("win64.zip"));
+        assertTrue(ReleaseService.parseArchive(x86 + x64, release, "windows-arm64-win10").downloadUri().toString().endsWith("win32.zip"));
     }
 }

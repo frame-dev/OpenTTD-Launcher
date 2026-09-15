@@ -149,6 +149,8 @@ public final class ReleaseService {
         return switch (platform) {
             case "macos-universal" -> java.util.List.of("macos-universal", "macosx-universal", "macosx");
             case "windows-win64" -> java.util.List.of("windows-win64", "windows-win32");
+            case "windows-arm64" -> java.util.List.of("windows-arm64", "windows-win64", "windows-win32");
+            case "windows-arm64-win10" -> java.util.List.of("windows-arm64", "windows-win32");
             default -> java.util.List.of(platform);
         };
     }
@@ -173,8 +175,7 @@ public final class ReleaseService {
         String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
         String architecture = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
         if (os.equals("darwin")) return "macos-universal";
-        if (os.contains("win")) return architecture.contains("aarch64") || architecture.contains("arm64") ? "windows-arm64"
-                : architecture.equals("x86") || architecture.matches("i[3-6]86") ? "windows-win32" : "windows-win64";
+        if (os.startsWith("windows")) return WindowsCompatibility.platform();
         if (os.contains("mac") || os.contains("darwin")) return "macos-universal";
         if (os.contains("linux")) return architecture.contains("aarch64") || architecture.contains("arm64") ? "linux-generic-arm64" : "linux-generic-amd64";
         throw new IOException("Unsupported operating system: " + os);

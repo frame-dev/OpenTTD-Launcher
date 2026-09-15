@@ -34,7 +34,7 @@ class JgrReleaseTest {
     }
 
     @Test void rejectsWrongArchitecture() {
-        assertThrows(IOException.class, () -> ReleaseService.parseJgrRelease(metadata("windows-win64.zip"), "windows-arm64"));
+        assertThrows(IOException.class, () -> ReleaseService.parseJgrRelease(metadata("windows-win64.zip"), "windows-win32"));
     }
 
     @Test void selectsMacDiskImage() throws Exception {

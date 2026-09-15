@@ -56,6 +56,7 @@ class OfficialPlatformTest {
         var installer = new InstallService(service);
         installer.install(release, root, (m, c, t) -> {});
         Path executable = installer.findInstalled(root, ReleaseChannel.STABLE).executable();
+        assertNotNull(WindowsCompatibility.launchCompatibility(executable));
         try (var file = new java.io.RandomAccessFile(executable.toFile(), "r")) {
             file.seek(0x3c); int pe = Integer.reverseBytes(file.readInt());
             file.seek(pe); assertEquals(0x50450000, file.readInt());
