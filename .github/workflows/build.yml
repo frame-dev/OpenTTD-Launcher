@@ -16,3 +16,21 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn --batch-mode clean verify
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build release bundles
+        shell: pwsh
+        run: ./scripts/package-release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundles
+          path: target/release/*
+          if-no-files-found: error

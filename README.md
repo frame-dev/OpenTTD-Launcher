@@ -2,6 +2,12 @@
 
 A small Java 21/Swing launcher for official OpenTTD releases and JGR's Patch Pack. It checks release sources, installs native releases into versioned managed folders, and launches the selected game without touching user saves or configuration.
 
+## Download and launch
+
+Extract the binary ZIP from [Releases](https://github.com/frame-dev/OpenTTD-Launcher/releases). Run `launch.bat` on Windows or `sh launch.sh` on macOS/Linux. Java 21 or newer with desktop support must be available as `java`. Maven is only required to build from source. Packages are unsigned and do not bundle Java.
+
+This is an independent project, not an official OpenTTD distribution.
+
 ## Requirements
 
 - Windows 10/11, macOS, or Linux
@@ -45,11 +51,9 @@ DMGs require macOS; Windows and Linux continue to use their own native downloads
 
 ## Original TTD graphics and sound
 
-For an older release that asks for original Transport Tycoon Deluxe files, install and select that version, then click **Set up TTD files**. The launcher downloads the [TTD archive from tt-ms.de](https://www.tt-ms.de/downloads/ttd302011.rar) and imports only `trg1r.grf`, `trgcr.grf`, `trghr.grf`, `trgir.grf`, `trgtr.grf`, and `sample.cat`. It does not run the original installer or import music.
+Click **Set up TTD files** and select a local folder containing `trg1r.grf`, `trgcr.grf`, `trghr.grf`, `trgir.grf`, `trgtr.grf`, and `sample.cat` from your copy of Transport Tycoon Deluxe. Names are matched regardless of case. All six files are validated before import. Game data is not downloaded or bundled.
 
-Launch also detects the legacy `data/openttd.grf` layout without base-set descriptors (such as OpenTTD 0.5.3). If required files are missing, it prepares them automatically and verifies them before starting the game. Empty required files are replaced from the cache. Setup errors prevent launch and appear in the launcher; starting a process is reported as “Launch requested,” with an exit status when it closes.
-
-These files are cached under `<install directory>/ttd-data` and copied beside the selected OpenTTD executable into both `data` (older releases) and `baseset` (newer releases). Existing files are preserved. Once set up, the cache is reused for future installs, repairs, and launches without another download. The original game data is downloaded on demand and is not bundled with the launcher or committed to this repository.
+Files are cached under `<install directory>/ttd-data` and copied into the game's `data` and `baseset` folders. Existing non-empty game files are preserved. The cache is reused for installs, repairs, and launches. Legacy games missing data explain how to import it before launch.
 
 ## Tests
 
@@ -70,3 +74,11 @@ Windows tests explicitly download and install the 32-bit builds of 0.3.6, 1.5.3 
 Mac launch checks read executable architecture headers directly, without requiring Xcode or command-line developer tools. Intel 64-bit builds on Apple Silicon are allowed through Rosetta and logged as such; macOS can present its normal Rosetta installation prompt. Universal builds prefer native execution. A 32-bit Intel build is allowed only on Intel macOS 10.14 or earlier, if a compatible launcher runtime is available; Rosetta does not make those builds work on modern Apple Silicon Macs. The launcher also rechecks compatibility for already-installed copies before launch.
 
 CI covers current Apple Silicon macOS, macOS 14 Apple Silicon, macOS 15 Intel, Windows x64, Windows 11 ARM64, and Linux. On Macs, the current release and the older Intel-only 1.10.3 release execute their help command after installation, covering Rosetta on Apple Silicon as well as native Intel execution. This does not guarantee full gameplay or compatibility with every past/future macOS release.
+
+## License and support
+
+Launcher code is **GPL-3.0-only**, not later versions; see [LICENSE](LICENSE). Dependencies retain their terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Game binaries and original game assets are separate works and are not included.
+
+Report problems through [Issues](https://github.com/frame-dev/OpenTTD-Launcher/issues), including operating system, Java version, game version, and error message. Remove personal information from logs. Contributions are submitted under GPL-3.0-only and should include relevant tests.
+
+See [RELEASING.md](RELEASING.md) for publication instructions.

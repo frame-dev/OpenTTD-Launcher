@@ -8,6 +8,26 @@ import static org.junit.jupiter.api.Assertions.*;
 class TtdDataServiceTest {
     @TempDir Path root;
 
+    @Test void importsCaseInsensitiveLocalFilesAndExcludesUnrelatedFiles() throws Exception {
+        Path source = Files.createDirectory(root.resolve("original"));
+        for (String name : TtdDataService.REQUIRED) Files.writeString(source.resolve(name.toUpperCase(java.util.Locale.ROOT)), "data");
+        Files.writeString(source.resolve("setup.exe"), "ignored");
+        new TtdDataService().importDirectory(source, root);
+        assertTrue(TtdDataService.complete(root.resolve("ttd-data")));
+        assertFalse(Files.exists(root.resolve("ttd-data/setup.exe")));
+    }
+
+    @Test void incompleteImportPreservesCacheAndMissingCacheExplainsSetup() throws Exception {
+        Path source = Files.createDirectory(root.resolve("incomplete"));
+        Path cache = Files.createDirectory(root.resolve("ttd-data"));
+        Files.writeString(cache.resolve("sample.cat"), "keep");
+        var service = new TtdDataService();
+        assertThrows(java.io.IOException.class, () -> service.importDirectory(source, root));
+        assertEquals("keep", Files.readString(cache.resolve("sample.cat")));
+        var failure = assertThrows(java.io.IOException.class, () -> service.prepare(root, (m, c, t) -> {}));
+        assertTrue(failure.getMessage().contains("Set up TTD files"));
+    }
+
     @Test void legacyLaunchRestoresMissingAndEmptyFilesFromCache() throws Exception {
         Path cache = Files.createDirectories(root.resolve("ttd-data"));
         for (String name : TtdDataService.REQUIRED) Files.writeString(cache.resolve(name), "original data");

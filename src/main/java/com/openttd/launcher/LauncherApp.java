@@ -279,10 +279,16 @@ public final class LauncherApp {
         if (busy || installed == null) return;
         InstalledVersion target = installed;
         Path root = settings.installRoot();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Select your original TTD graphics and sound folder");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        Path source = chooser.getSelectedFile().toPath();
         setBusy(true, "Preparing TTD files...");
-        log("Setting up original graphics and sound from " + TtdDataService.SOURCE);
+        log("Importing original graphics and sound from " + source);
         worker.submit(() -> {
             try {
+                ttdDataService.importDirectory(source, root);
                 ttdDataService.prepare(root, (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));
