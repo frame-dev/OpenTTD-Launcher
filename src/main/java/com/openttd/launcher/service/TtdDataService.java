@@ -39,7 +39,19 @@ public final class TtdDataService {
         }
     }
     static void deleteTemporary(Path directory) throws IOException {
-        try(var paths=Files.walk(directory)) { for(Path path:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
+        try(var paths=Files.walk(directory)) {
+            for(Path path:paths.sorted(Comparator.reverseOrder()).toList()) {
+                for(int attempt=0;;attempt++) {
+                    try { Files.deleteIfExists(path); break; }
+                    catch(AccessDeniedException ex) {
+                        // Windows emulation or antivirus can briefly retain a finished executable.
+                        if(attempt>=40) throw ex;
+                        try { Thread.sleep(250); }
+                        catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new InterruptedIOException("Temporary-file cleanup interrupted"); }
+                    }
+                }
+            }
+        }
     }
     static final Set<String> REQUIRED = Set.of("trg1r.grf", "trgcr.grf", "trghr.grf", "trgir.grf", "trgtr.grf", "sample.cat");
 
