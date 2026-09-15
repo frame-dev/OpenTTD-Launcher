@@ -6,6 +6,7 @@ import com.openttd.launcher.model.ReleaseInfo;
 import com.openttd.launcher.service.InstallService;
 import com.openttd.launcher.service.ReleaseService;
 import com.openttd.launcher.service.Settings;
+import com.openttd.launcher.service.TtdDataService;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -67,6 +68,8 @@ public final class LauncherApp {
     private final JButton launchButton = button("Launch OpenTTD");
     private final JButton checkButton = button("Check for updates");
     private final JButton folderButton = button("Choose folder");
+    private final JButton ttdButton = button("Set up TTD files");
+    private final TtdDataService ttdDataService = new TtdDataService();
     private boolean busy;
     private ReleaseInfo latest;
     private InstalledVersion installed;
@@ -145,6 +148,10 @@ public final class LauncherApp {
         checkButton.addActionListener(e -> checkLatest());
         utilities.add(folderButton, BorderLayout.WEST);
         utilities.add(checkButton, BorderLayout.EAST);
+        ttdButton.setToolTipText("Download original TTD graphics and sound from tt-ms.de for the selected installation");
+        ttdButton.addActionListener(e -> setupTtdFiles());
+        JPanel dataAction = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0)); dataAction.setOpaque(false);
+        dataAction.add(ttdButton); utilities.add(dataAction, BorderLayout.CENTER);
         panel.add(utilities, BorderLayout.NORTH);
         JPanel primary = new JPanel(new GridLayout(1, 4, 10, 0));
         primary.setOpaque(false);
@@ -237,7 +244,28 @@ public final class LauncherApp {
 
     private void launch() {
         if (installed == null) { failure("Nothing to launch", new IOException("Install a release first")); return; }
-        try { new ProcessBuilder(installed.executable().toString()).directory(installed.directory().toFile()).start(); log("Launched " + installed.label()); status("Game running", SUCCESS); } catch (IOException ex) { failure("Could not launch OpenTTD", ex); }
+        try { ttdDataService.applyCached(settings.installRoot(), installed.executable()); new ProcessBuilder(installed.executable().toString()).directory(installed.directory().toFile()).start(); log("Launched " + installed.label()); status("Game running", SUCCESS); } catch (IOException ex) { failure("Could not launch OpenTTD", ex); }
+    }
+
+    private void setupTtdFiles() {
+        if (busy || installed == null) return;
+        InstalledVersion target = installed;
+        Path root = settings.installRoot();
+        setBusy(true, "Preparing TTD files...");
+        log("Setting up original graphics and sound from " + TtdDataService.SOURCE);
+        worker.submit(() -> {
+            try {
+                ttdDataService.prepare(root, (message, completed, total) -> SwingUtilities.invokeLater(() -> {
+                    status(message, TEXT); progress.setString(message);
+                }));
+                ttdDataService.applyCached(root, target.executable());
+                SwingUtilities.invokeLater(() -> {
+                    setBusy(false, "TTD files ready");
+                    status("Graphics and sound ready", SUCCESS);
+                    log("Original TTD files installed for " + target.label() + ". Cached files will be reused for other versions.");
+                });
+            } catch (Exception ex) { SwingUtilities.invokeLater(() -> failure("Could not set up TTD files", ex)); }
+        });
     }
 
     private void chooseFolder() { JFileChooser chooser = new JFileChooser(settings.installRoot().toFile()); chooser.setDialogTitle("Choose OpenTTD install directory"); chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY); if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) { settings.installRoot(chooser.getSelectedFile().toPath()); refreshDirectory(); resetVersions(); checkLatest(); log("Install directory changed."); } }
@@ -265,6 +293,7 @@ public final class LauncherApp {
         checkButton.setEnabled(!busy);
         channelBox.setEnabled(!busy);
         folderButton.setEnabled(!busy);
+        ttdButton.setEnabled(!busy && installed != null);
         installButton.setEnabled(!busy && available && installed == null);
         updateButton.setEnabled(!busy && latest != null && installed != null && !current);
         repairButton.setEnabled(!busy && available && installed != null);

@@ -58,6 +58,7 @@ public final class InstallService {
             Path executable = findExecutable(staging);
             if (executable == null) throw new IOException("The archive did not contain an OpenTTD executable");
             executable.toFile().setExecutable(true, false);
+            new TtdDataService().applyCached(root, executable);
             Properties manifest = new Properties();
             manifest.setProperty("channel", release.channel().name());
             manifest.setProperty("version", release.version());
