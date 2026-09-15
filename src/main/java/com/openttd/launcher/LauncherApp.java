@@ -251,6 +251,8 @@ public final class LauncherApp {
         setBusy(true, "Preparing to launch...");
         worker.submit(() -> {
             try {
+                String compatibility = MacDmgInstaller.launchCompatibility(target.executable());
+                if (compatibility != null) SwingUtilities.invokeLater(() -> log(compatibility));
                 ttdDataService.ensureForLaunch(root, target.executable(), (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));

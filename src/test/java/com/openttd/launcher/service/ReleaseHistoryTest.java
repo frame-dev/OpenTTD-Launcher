@@ -21,6 +21,9 @@ class ReleaseHistoryTest {
                 if (html.contains("windows-win32.zip") || html.contains("windows-win64.zip")) {
                     assertNotNull(ReleaseService.parseArchive(html, release, "windows-win64"), version); windows++;
                 }
+                if (html.contains("windows-win32.zip")) {
+                    assertTrue(ReleaseService.parseArchive(html, release, "windows-win32").downloadUri().toString().endsWith("windows-win32.zip"), version);
+                }
                 if (html.matches("(?s).*-macos(?:x)?(?:-universal)?\\.(zip|dmg).*")) {
                     assertNotNull(ReleaseService.parseArchive(html, release, "macos-universal"), version); mac++;
                 }
