@@ -8,6 +8,38 @@ import static org.junit.jupiter.api.Assertions.*;
 class TtdDataServiceTest {
     @TempDir Path root;
 
+    @Test void legacyLaunchRestoresMissingAndEmptyFilesFromCache() throws Exception {
+        Path cache = Files.createDirectories(root.resolve("ttd-data"));
+        for (String name : TtdDataService.REQUIRED) Files.writeString(cache.resolve(name), "original data");
+        Path game = Files.createDirectories(root.resolve("versions/stable-0.5.3"));
+        Path data = Files.createDirectories(game.resolve("data"));
+        Files.writeString(data.resolve("openttd.grf"), "bundled graphics");
+        Files.writeString(data.resolve("sample.cat"), "");
+        assertTrue(TtdDataService.legacyLayout(game.resolve("openttd.exe")));
+        new TtdDataService().ensureForLaunch(root, game.resolve("openttd.exe"), (m, c, t) -> {});
+        assertTrue(TtdDataService.complete(data));
+        assertEquals("original data", Files.readString(data.resolve("sample.cat")));
+        assertEquals("bundled graphics", Files.readString(data.resolve("openttd.grf")));
+    }
+
+    @Test void modernLayoutDoesNotRequireOriginalFilesOrDownload() throws Exception {
+        Path game = Files.createDirectories(root.resolve("modern"));
+        new TtdDataService().ensureForLaunch(root, game.resolve("openttd.exe"), (m, c, t) -> fail("Should not download"));
+        assertFalse(Files.exists(root.resolve("ttd-data")));
+        Path data = Files.createDirectories(game.resolve("data"));
+        Files.writeString(data.resolve("openttd.grf"), "graphics");
+        Files.writeString(data.resolve("opengfx.obg"), "base set descriptor");
+        assertFalse(TtdDataService.legacyLayout(game.resolve("openttd.exe")));
+    }
+
+    @Test void completeLegacyInstallationWorksWithoutCache() throws Exception {
+        Path data = Files.createDirectories(root.resolve("game/data"));
+        Files.writeString(data.resolve("openttd.grf"), "bundled graphics");
+        for (String name : TtdDataService.REQUIRED) Files.writeString(data.resolve(name), "existing data");
+        new TtdDataService().ensureForLaunch(root, data.getParent().resolve("openttd.exe"), (m, c, t) -> fail("Should not download"));
+        assertFalse(Files.exists(root.resolve("ttd-data")));
+    }
+
     @Test void incompleteCacheIsNotUsed() throws Exception {
         Path cache = Files.createDirectories(root.resolve("ttd-data"));
         Files.writeString(cache.resolve("trg1r.grf"), "partial");

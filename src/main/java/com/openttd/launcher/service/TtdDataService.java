@@ -86,6 +86,25 @@ public final class TtdDataService {
         });
     }
 
+    static boolean legacyLayout(Path executable) throws IOException {
+        Path data = executable.toAbsolutePath().getParent().resolve("data");
+        if (!Files.isRegularFile(data.resolve("openttd.grf"))) return false;
+        try (var files = Files.walk(data, 2)) {
+            return files.noneMatch(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".obg"));
+        }
+    }
+
+    public void ensureForLaunch(Path root, Path executable, InstallService.ProgressListener progress) throws Exception {
+        boolean legacy = legacyLayout(executable);
+        Path data = executable.toAbsolutePath().getParent().resolve("data");
+        if (legacy && !complete(data)) {
+            progress.update("This version needs original TTD files. Preparing them...", 0, -1);
+            prepare(root, progress);
+        }
+        applyCached(root, executable);
+        if (legacy && !complete(data)) throw new IOException("Required TTD files are missing from " + data + ". Use Set up TTD files before launching.");
+    }
+
     public void applyCached(Path root, Path executable) throws IOException {
         Path cache = root.resolve("ttd-data");
         if (!complete(cache)) return;
@@ -96,6 +115,9 @@ public final class TtdDataService {
             for (String name : REQUIRED) {
                 Path target = destination.resolve(name);
                 if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) Files.copy(cache.resolve(name), target);
+                else if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && Files.size(target) == 0) {
+                    Files.copy(cache.resolve(name), target, StandardCopyOption.REPLACE_EXISTING);
+                }
             }
         }
     }

@@ -41,6 +41,8 @@ Stable lists final releases, Testing lists beta/RC releases, and Nightly loads o
 
 For an older release that asks for original Transport Tycoon Deluxe files, install and select that version, then click **Set up TTD files**. The launcher downloads the [TTD archive from tt-ms.de](https://www.tt-ms.de/downloads/ttd302011.rar) and imports only `trg1r.grf`, `trgcr.grf`, `trghr.grf`, `trgir.grf`, `trgtr.grf`, and `sample.cat`. It does not run the original installer or import music.
 
+Launch also detects the legacy `data/openttd.grf` layout without base-set descriptors (such as OpenTTD 0.5.3). If required files are missing, it prepares them automatically and verifies them before starting the game. Empty required files are replaced from the cache. Setup errors prevent launch and appear in the launcher; starting a process is reported as “Launch requested,” with an exit status when it closes.
+
 These files are cached under `<install directory>/ttd-data` and copied beside the selected OpenTTD executable into both `data` (older releases) and `baseset` (newer releases). Existing files are preserved. Once set up, the cache is reused for future installs, repairs, and launches without another download. The original game data is downloaded on demand and is not bundled with the launcher or committed to this repository.
 
 ## Tests

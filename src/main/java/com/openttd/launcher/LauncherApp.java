@@ -243,8 +243,30 @@ public final class LauncherApp {
     }
 
     private void launch() {
+        if (busy) return;
         if (installed == null) { failure("Nothing to launch", new IOException("Install a release first")); return; }
-        try { ttdDataService.applyCached(settings.installRoot(), installed.executable()); new ProcessBuilder(installed.executable().toString()).directory(installed.directory().toFile()).start(); log("Launched " + installed.label()); status("Game running", SUCCESS); } catch (IOException ex) { failure("Could not launch OpenTTD", ex); }
+        InstalledVersion target = installed;
+        Path root = settings.installRoot();
+        setBusy(true, "Preparing to launch...");
+        worker.submit(() -> {
+            try {
+                ttdDataService.ensureForLaunch(root, target.executable(), (message, completed, total) -> SwingUtilities.invokeLater(() -> {
+                    status(message, TEXT); progress.setString(message);
+                }));
+                Process process = new ProcessBuilder(target.executable().toString())
+                        .directory(target.executable().toAbsolutePath().getParent().toFile())
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+                SwingUtilities.invokeLater(() -> {
+                    setBusy(false, "Launch requested");
+                    log("Launch requested for " + target.label());
+                });
+                process.onExit().thenAccept(exited -> SwingUtilities.invokeLater(() -> {
+                    String message = exited.exitValue() == 0 ? "Game closed" : "Game exited with code " + exited.exitValue();
+                    log(target.label() + ": " + message);
+                    if (!busy && target.equals(installed)) status(message, exited.exitValue() == 0 ? MUTED : new Color(255, 126, 126));
+                }));
+            } catch (Exception ex) { SwingUtilities.invokeLater(() -> failure("Could not launch OpenTTD", ex)); }
+        });
     }
 
     private void setupTtdFiles() {
