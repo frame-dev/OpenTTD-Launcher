@@ -69,6 +69,7 @@ public final class LauncherApp {
     private final JButton repairButton = button("Repair");
     private final JButton launchButton = button("Launch OpenTTD");
     private final JButton checkButton = button("Check for updates");
+    private final JButton settingsButton = button("Settings");
     private final JButton folderButton = button("Choose folder");
     private final JButton ttdButton = button("Set up TTD files");
     private final TtdDataService ttdDataService = new TtdDataService();
@@ -89,10 +90,11 @@ public final class LauncherApp {
         frame.setLocationByPlatform(true);
         frame.setContentPane(buildContent());
         frame.addWindowListener(new WindowAdapter() { @Override public void windowClosed(WindowEvent e) { worker.shutdownNow(); } });
+        applyPreferences();
         frame.setVisible(true);
         refreshDirectory();
         resetVersions();
-        checkLatest();
+        if (settings.preferences().checkOnStartup()) checkLatest();
     }
 
     private JPanel buildContent() {
@@ -108,6 +110,9 @@ public final class LauncherApp {
         JLabel title = new JLabel("OpenTTD Launcher"); title.setForeground(TEXT); title.setFont(new Font("Segoe UI", Font.BOLD, 30));
         JLabel subtitle = new JLabel("Keep your railway empire moving"); subtitle.setForeground(MUTED); subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         JPanel copy = new JPanel(new GridLayout(2, 1, 0, 3)); copy.setOpaque(false); copy.add(title); copy.add(subtitle); panel.add(copy, BorderLayout.WEST);
+        settingsButton.addActionListener(e -> new SettingsDialog(frame, settings, this::applyPreferences).show());
+        JPanel settingsAction = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)); settingsAction.setOpaque(false);
+        settingsAction.add(settingsButton); panel.add(settingsAction, BorderLayout.EAST);
         channelBox.setSelectedItem(settings.channel()); channelBox.setBackground(PANEL_ALT); channelBox.setForeground(TEXT); channelBox.setFont(new Font("Segoe UI", Font.PLAIN, 14)); channelBox.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
         channelBox.addActionListener(e -> { settings.channel((ReleaseChannel) channelBox.getSelectedItem()); resetVersions(); checkLatest(); });
         JPanel selector = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); selector.setOpaque(false); selector.add(label("CHANNEL")); selector.add(channelBox);
@@ -150,7 +155,7 @@ public final class LauncherApp {
         checkButton.addActionListener(e -> checkLatest());
         utilities.add(folderButton, BorderLayout.WEST);
         utilities.add(checkButton, BorderLayout.EAST);
-        ttdButton.setToolTipText("Download original TTD graphics and sound from tt-ms.de for the selected installation");
+        ttdButton.setToolTipText("Import your original TTD graphics and sound for the selected installation");
         ttdButton.addActionListener(e -> setupTtdFiles());
         JPanel dataAction = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0)); dataAction.setOpaque(false);
         dataAction.add(ttdButton); utilities.add(dataAction, BorderLayout.CENTER);
@@ -161,6 +166,7 @@ public final class LauncherApp {
         updateButton.addActionListener(e -> { if (latest != null) { mergeVersions(java.util.List.of(latest)); versionBox.setSelectedItem(latest); install(false); } });
         repairButton.addActionListener(e -> install(true));
         launchButton.addActionListener(e -> launch());
+        launchButton.putClientProperty("primary", true);
         launchButton.setBackground(ACCENT);
         launchButton.setForeground(BACKGROUND);
         launchButton.setOpaque(true);
@@ -249,6 +255,7 @@ public final class LauncherApp {
         if (installed == null) { failure("Nothing to launch", new IOException("Install a release first")); return; }
         InstalledVersion target = installed;
         Path root = settings.installRoot();
+        var preferences = settings.preferences();
         setBusy(true, "Preparing to launch...");
         worker.submit(() -> {
             try {
@@ -259,14 +266,16 @@ public final class LauncherApp {
                 ttdDataService.ensureForLaunch(root, target.executable(), (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));
-                Process process = new ProcessBuilder(MacDmgInstaller.launchCommand(target.executable()))
+                Process process = new ProcessBuilder(MacDmgInstaller.launchCommand(target.executable(), preferences.argumentList()))
                         .directory(MacDmgInstaller.workingDirectory(target.executable()).toFile())
                         .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
                 SwingUtilities.invokeLater(() -> {
                     setBusy(false, "Launch requested");
                     log("Launch requested for " + target.label());
+                    if (preferences.minimizeOnLaunch()) frame.setState(JFrame.ICONIFIED);
                 });
                 process.onExit().thenAccept(exited -> SwingUtilities.invokeLater(() -> {
+                    if (preferences.minimizeOnLaunch() && preferences.restoreOnExit() && frame.isDisplayable()) frame.setState(JFrame.NORMAL);
                     String message = exited.exitValue() == 0 ? "Game closed" : "Game exited with code " + exited.exitValue();
                     log(target.label() + ": " + message);
                     if (!busy && target.equals(installed)) status(message, exited.exitValue() == 0 ? MUTED : new Color(255, 126, 126));
@@ -325,6 +334,7 @@ public final class LauncherApp {
         versionBox.setEnabled(!busy && versionBox.getItemCount() > 0);
         historyButton.setEnabled(!busy && moreHistory);
         checkButton.setEnabled(!busy);
+        settingsButton.setEnabled(!busy);
         channelBox.setEnabled(!busy);
         folderButton.setEnabled(!busy);
         ttdButton.setEnabled(!busy && installed != null);
@@ -343,9 +353,23 @@ public final class LauncherApp {
         if (!busy) progress.setValue(0);
     }
     private void failure(String title, Exception ex) { setBusy(false, "Action failed"); status(title, new Color(255, 126, 126)); log(title + ": " + ex.getMessage()); JOptionPane.showMessageDialog(frame, ex.getMessage(), title, JOptionPane.ERROR_MESSAGE); }
-    private void log(String message) { log.append(message + "\n"); log.setCaretPosition(log.getDocument().getLength()); }
+    private void applyPreferences() {
+        Appearance.apply(frame.getContentPane(), settings.preferences());
+        int scale = settings.preferences().scale();
+        frame.setMinimumSize(new Dimension(760 * scale / 100, 600 * scale / 100));
+        frame.setSize(Math.max(frame.getWidth(), frame.getMinimumSize().width), Math.max(frame.getHeight(), frame.getMinimumSize().height));
+        trimLog(); frame.revalidate(); frame.repaint();
+    }
+    private void trimLog() {
+        int excess = log.getLineCount() - settings.preferences().logLines() - 1;
+        if (excess > 0) try { log.replaceRange("",0,log.getLineStartOffset(excess)); } catch (javax.swing.text.BadLocationException ignored) {}
+    }
+    private void log(String message) {
+        String prefix = settings.preferences().timestamps() ? java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")) + "  " : "";
+        log.append(prefix + message + "\n"); trimLog(); log.setCaretPosition(log.getDocument().getLength());
+    }
     private void status(String message, Color color) { statusValue.setText(message); statusValue.setForeground(color); }
-    private static JButton button(String text) { JButton button = new JButton(text); button.setFont(new Font("Segoe UI", Font.BOLD, 13)); button.setForeground(TEXT); button.setBackground(PANEL_ALT); button.setFocusPainted(false); button.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(9, 13, 9, 13))); button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); return button; }
+    private static JButton button(String text) { JButton button = new JButton(text); button.setFont(new Font("Segoe UI", Font.BOLD, 13)); button.setForeground(TEXT); button.setBackground(PANEL_ALT); button.setFocusPainted(true); button.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(9, 13, 9, 13))); button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); return button; }
     private static JLabel label(String text) { JLabel label = new JLabel(text); label.setForeground(MUTED); label.setFont(new Font("Segoe UI", Font.BOLD, 11)); return label; }
     private static JLabel valueLabel(String text) { JLabel label = new JLabel(text); label.setForeground(TEXT); return label; }
     private static String shorten(String text, int max) { return text.length() <= max ? text : "..." + text.substring(text.length() - max + 3); }

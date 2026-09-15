@@ -162,6 +162,13 @@ public final class MacDmgInstaller {
         return app == null ? List.of(executable.toString()) : List.of("/usr/bin/open", "-W", "-n", app.toString());
     }
 
+    public static List<String> launchCommand(Path executable, List<String> arguments) {
+        var command = new java.util.ArrayList<>(launchCommand(executable));
+        if (!arguments.isEmpty() && appBundle(executable) != null) command.add("--args");
+        command.addAll(arguments);
+        return List.copyOf(command);
+    }
+
     public static Path workingDirectory(Path executable) {
         Path app = appBundle(executable);
         return app == null ? executable.toAbsolutePath().getParent() : app.getParent();

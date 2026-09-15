@@ -82,3 +82,14 @@ Launcher code is **GPL-3.0-only**, not later versions; see [LICENSE](LICENSE). D
 Report problems through [Issues](https://github.com/frame-dev/OpenTTD-Launcher/issues), including operating system, Java version, game version, and error message. Remove personal information from logs. Contributions are submitted under GPL-3.0-only and should include relevant tests.
 
 See [RELEASING.md](RELEASING.md) for publication instructions.
+
+## Launcher settings
+
+Open **Settings** in the top-right corner. Changes apply when you click **Save settings**; Cancel and Escape discard edits.
+
+- **Appearance:** dark or light theme, any accent color, and text size from 85% to 150%. Changes apply immediately after saving.
+- **Behavior:** automatic release checks on startup, minimize after launch, restore when the game closes, timestamps, and an activity history limit (100–10,000 lines). Manual update checks remain available.
+- **Game launch:** extra OpenTTD arguments, one argument per line. For example, enter `-r` followed by `1280x720` on the next line. Keep paths with spaces on a single line without quotes. Arguments are passed directly to the game, including through macOS app bundles; supported options vary by game version.
+- **Reset defaults:** restores launcher preferences when saved, keeping the selected channel, installation folder, and installed games.
+
+Preferences are stored in `.openttd-launcher.properties` in your home directory. Saves replace the file atomically where supported, and save errors are reported. Use **Choose folder** to change the managed installation location. These settings customize the launcher; game-specific graphics, sound, controls, and gameplay remain in OpenTTD itself.
