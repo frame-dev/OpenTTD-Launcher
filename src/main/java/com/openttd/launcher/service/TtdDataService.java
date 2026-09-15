@@ -4,12 +4,47 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
-/** Imports original graphics and sound from a user-selected local directory. */
+/** Downloads or imports the six original graphics and sound files. */
 public final class TtdDataService {
+    public static final java.net.URI SOURCE = java.net.URI.create("https://www.tt-ms.de/downloads/ttd302011.rar");
+    public void downloadAndPrepare(Path root, InstallService.ProgressListener progress) throws Exception {
+        if (complete(root.resolve("ttd-data"))) { progress.update("Using cached TTD files",1,1); return; }
+        Files.createDirectories(root);
+        Path stage=Files.createTempDirectory(root,".ttd-download-");
+        try {
+            Path tool=TtdArchiveTool.prepare(root,progress);
+            Path archive=stage.resolve("original.rar");
+            progress.update("Downloading original TTD graphics and sound",0,-1);
+            download(SOURCE,archive,128L*1024*1024);
+            Path output=Files.createDirectory(stage.resolve("data"));
+            progress.update("Extracting original TTD graphics and sound",0,-1);
+            TtdArchiveTool.extract(tool,archive,output);
+            importDirectory(output,root);
+            progress.update("TTD files ready",1,1);
+        } finally { deleteTemporary(stage); }
+    }
+    static void download(java.net.URI uri,Path destination,long limit) throws Exception {
+        var client=java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(15)).followRedirects(java.net.http.HttpClient.Redirect.NORMAL).build();
+        var request=java.net.http.HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofMinutes(2)).GET().build();
+        var response=client.send(request,java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+        try(var input=response.body()) {
+            if(response.statusCode()/100!=2) throw new IOException("Download returned HTTP "+response.statusCode());
+            try(var output=Files.newOutputStream(destination)) {
+                byte[] buffer=new byte[65536];long total=0;int n;
+                while((n=input.read(buffer))!=-1) {
+                    if(Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download interrupted");
+                    total+=n;if(total>limit) throw new IOException("Download exceeds size limit");output.write(buffer,0,n);
+                }
+            }
+        }
+    }
+    static void deleteTemporary(Path directory) throws IOException {
+        try(var paths=Files.walk(directory)) { for(Path path:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
+    }
     static final Set<String> REQUIRED = Set.of("trg1r.grf", "trgcr.grf", "trghr.grf", "trgir.grf", "trgtr.grf", "sample.cat");
 
     public void prepare(Path root, InstallService.ProgressListener progress) throws IOException {
-        if (!complete(root.resolve("ttd-data"))) throw new IOException("Original TTD files are required. Click Set up TTD files and select a folder containing your original graphics and sound files.");
+        if (!complete(root.resolve("ttd-data"))) throw new IOException("Original TTD files are required. Click Set up TTD files and choose Download and install or Import from folder.");
         progress.update("Using cached TTD files", 1, 1);
     }
 

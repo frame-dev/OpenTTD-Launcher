@@ -15,7 +15,7 @@ jobs:
           distribution: ${{ matrix.os == 'windows-11-arm' && 'microsoft' || 'temurin' }}
           java-version: '21'
           cache: maven
-      - run: mvn --batch-mode clean verify
+      - run: mvn --batch-mode "-Dttd.download.test=true" clean verify
   package:
     needs: test
     runs-on: ubuntu-latest

@@ -14,4 +14,4 @@ Runtime dependencies retain their original terms:
 
 The binary ZIP includes dependency JARs with their license and notice files under `third-party`. The matching source ZIP includes dependency source JARs. Update this inventory when dependencies change. Build and test tools are not bundled.
 
-Game binaries and original TTD assets are not included. Junrar/UnRAR and automatic RAR downloads have been removed from this GPL release.
+Game binaries and original TTD assets are not included. The optional TTD download retrieves assets from tt-ms.de and invokes a separately downloaded 7-Zip 26.03 executable as an external program. No Junrar or UnRAR library is linked into the launcher. The downloaded tool retains its upstream License.txt and readme.txt; its SHA-256 is verified before extraction. Upstream binaries, source, and licensing information are available at https://github.com/ip7z/7zip/releases/tag/26.03 and https://www.7-zip.org/license.txt.

@@ -51,9 +51,11 @@ DMGs require macOS; Windows and Linux continue to use their own native downloads
 
 ## Original TTD graphics and sound
 
-Click **Set up TTD files** and select a local folder containing `trg1r.grf`, `trgcr.grf`, `trghr.grf`, `trgir.grf`, `trgtr.grf`, and `sample.cat` from your copy of Transport Tycoon Deluxe. Names are matched regardless of case. All six files are validated before import. Game data is not downloaded or bundled.
+Click **Set up TTD files → Download and install** to download the original graphics and sound from [tt-ms.de](https://www.tt-ms.de/downloads/ttd302011.rar) and install them for the selected game. The launcher automatically downloads a separate, checksum-verified [7-Zip 26.03 command-line tool](https://www.7-zip.org/download.html) into `<install directory>/tools` when needed. It supports Windows x86/x64/ARM64, Intel/Apple Silicon Macs, and Linux x86/x64/ARM64. Nothing is installed system-wide.
 
-Files are cached under `<install directory>/ttd-data` and copied into the game's `data` and `baseset` folders. Existing non-empty game files are preserved. The cache is reused for installs, repairs, and launches. Legacy games missing data explain how to import it before launch.
+Alternatively, choose **Import from folder** and select a local folder containing `trg1r.grf`, `trgcr.grf`, `trghr.grf`, `trgir.grf`, `trgtr.grf`, and `sample.cat` from your copy of Transport Tycoon Deluxe. Names are matched regardless of case. All six files are validated before import. Game data and extraction tools are downloaded only when this option is chosen; neither is bundled with the launcher.
+
+Files are cached under `<install directory>/ttd-data` and copied into the game's `data` and `baseset` folders. Existing non-empty game files are preserved. The cache is reused for installs, repairs, and launches. Legacy games missing data explain how to download or import it before launch. A complete cache is reused without another download. Failed downloads are cleaned up, and all six files are validated before being imported.
 
 ## Tests
 

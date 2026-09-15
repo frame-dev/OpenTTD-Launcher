@@ -155,7 +155,7 @@ public final class LauncherApp {
         checkButton.addActionListener(e -> checkLatest());
         utilities.add(folderButton, BorderLayout.WEST);
         utilities.add(checkButton, BorderLayout.EAST);
-        ttdButton.setToolTipText("Import your original TTD graphics and sound for the selected installation");
+        ttdButton.setToolTipText("Download or import original TTD graphics and sound for the selected installation");
         ttdButton.addActionListener(e -> setupTtdFiles());
         JPanel dataAction = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0)); dataAction.setOpaque(false);
         dataAction.add(ttdButton); utilities.add(dataAction, BorderLayout.CENTER);
@@ -288,16 +288,28 @@ public final class LauncherApp {
         if (busy || installed == null) return;
         InstalledVersion target = installed;
         Path root = settings.installRoot();
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select your original TTD graphics and sound folder");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
-        Path source = chooser.getSelectedFile().toPath();
+        int choice = JOptionPane.showOptionDialog(frame,
+                "Download and install the original graphics and sound from tt-ms.de, or import a local folder.",
+                "Set up TTD files", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null,
+                new String[]{"Download and install", "Import from folder", "Cancel"}, "Download and install");
+        if (choice < 0 || choice == 2) return;
+        Path selectedSource = null;
+        if (choice == 1) {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Select your original TTD graphics and sound folder");
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+            selectedSource = chooser.getSelectedFile().toPath();
+        }
+        Path source = selectedSource;
         setBusy(true, "Preparing TTD files...");
-        log("Importing original graphics and sound from " + source);
+        log(source == null ? "Downloading original graphics and sound from " + TtdDataService.SOURCE : "Importing original graphics and sound from " + source);
         worker.submit(() -> {
             try {
-                ttdDataService.importDirectory(source, root);
+                if (source == null) ttdDataService.downloadAndPrepare(root, (message, completed, total) -> SwingUtilities.invokeLater(() -> {
+                    status(message, TEXT); progress.setString(message);
+                }));
+                else ttdDataService.importDirectory(source, root);
                 ttdDataService.prepare(root, (message, completed, total) -> SwingUtilities.invokeLater(() -> {
                     status(message, TEXT); progress.setString(message);
                 }));
