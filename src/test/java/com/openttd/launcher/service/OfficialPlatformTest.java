@@ -14,12 +14,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class OfficialPlatformTest {
     @TempDir Path root;
 
-    @ParameterizedTest @ValueSource(strings = {"15.3", "1.5.3"})
+    @ParameterizedTest @ValueSource(strings = {"15.3", "1.10.3", "1.5.3"})
     void installsOfficialModernAndHistoricalVersions(String version) throws Exception {
         var service = new ReleaseService();
         var release = service.resolveDownload(new ReleaseInfo(ReleaseChannel.STABLE, version, null,
                 "https://cdn.openttd.org/openttd-releases/" + version + "/"));
         var installer = new InstallService(service);
+        if (version.equals("1.5.3") && System.getProperty("os.name").contains("Mac")) {
+            var failure = assertThrows(java.io.IOException.class, () -> installer.install(release, root, (m, c, t) -> {}));
+            assertTrue(failure.getMessage().contains("32-bit or PowerPC"));
+            assertNull(installer.findInstalled(root, ReleaseChannel.STABLE));
+            return;
+        }
         installer.install(release, root, (m, c, t) -> {});
         var game = installer.findInstalled(root, ReleaseChannel.STABLE);
         assertNotNull(game);
