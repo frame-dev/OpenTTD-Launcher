@@ -57,7 +57,8 @@ public final class InstallService {
             extract(temp, staging, release.downloadUri().getPath());
             Path executable = findExecutable(staging);
             if (executable == null) throw new IOException("The archive did not contain an OpenTTD executable");
-            executable.toFile().setExecutable(true, false);
+            if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")) MacDmgInstaller.validateExecutable(executable);
+            else executable.toFile().setExecutable(true, false);
             new TtdDataService().applyCached(root, executable);
             Properties manifest = new Properties();
             manifest.setProperty("channel", release.channel().name());
@@ -169,7 +170,7 @@ public final class InstallService {
 
     private static Path findExecutable(Path root, Path excluded) throws IOException {
         if (!Files.isDirectory(root)) return null;
-        try (Stream<Path> paths = Files.walk(root, 4)) {
+        try (Stream<Path> paths = Files.walk(root, 8)) {
             return paths.filter(path -> excluded == null || !path.startsWith(excluded))
                     .filter(Files::isRegularFile).filter(path -> {
                 String name = path.getFileName().toString();
@@ -195,8 +196,20 @@ public final class InstallService {
         else extractZip(archive, target);
     }
 
-    private static void extractZip(Path zip, Path target) throws IOException {
+    private static void extractZip(Path zip, Path target) throws IOException, InterruptedException {
         Path normalizedTarget = target.toAbsolutePath().normalize();
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")) {
+            // Check paths before using ditto to preserve bundle links and metadata.
+            try (var entries = new java.util.zip.ZipFile(zip.toFile())) {
+                for (var entry : entries.stream().toList()) {
+                    if (!normalizedTarget.resolve(entry.getName()).normalize().startsWith(normalizedTarget)) {
+                        throw new IOException("Unsafe archive entry: " + entry.getName());
+                    }
+                }
+            }
+            MacDmgInstaller.extractZip(zip, target);
+            return;
+        }
         try (var input = new ZipInputStream(Files.newInputStream(zip))) {
             ZipEntry entry;
             while ((entry = input.getNextEntry()) != null) {

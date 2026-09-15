@@ -74,17 +74,18 @@ public final class ReleaseService {
 
     static ReleaseInfo parseArchive(String html, ReleaseInfo release, String platform) throws IOException {
         var matcher = Pattern.compile("href=\"([^\"]+)\"").matcher(html);
-        String prefix = "openttd-" + release.version() + "-" + platform;
+        String prefix = "openttd-" + release.version() + "-";
+        String best = null; int rank = Integer.MAX_VALUE;
         while (matcher.find()) {
             String name = matcher.group(1);
-            if (supportedAsset(name, prefix, platform)) {
-                return new ReleaseInfo(release.channel(), release.version(), URI.create(release.pageUri()).resolve(name), release.pageUri());
-            }
+            int candidate = assetRank(name, prefix, platform);
+            if (candidate < rank) { best = name; rank = candidate; }
         }
-        throw new IOException("No supported archive for " + platform + " in release " + release.version());
+        if (best != null) return new ReleaseInfo(release.channel(), release.version(), URI.create(release.pageUri()).resolve(best), release.pageUri());
+        throw new IOException("No compatible archive was published for " + platform + " in release " + release.version());
     }
     private static final Pattern ASSET = Pattern.compile(
-            "https://cdn\\.openttd\\.org/(openttd-releases|openttd-nightlies)/(?:[^/]+/)*(openttd-[^/\\\"<>]+-(?:windows-win64|windows-arm64|linux-generic-amd64|linux-generic-arm64|macos-universal)\\.(?:zip|tar\\.xz|dmg))",
+            "https://cdn\\.openttd\\.org/(openttd-releases|openttd-nightlies)/(?:[^/]+/)*(openttd-[^/\\\"<>]+-(?:windows-win64|windows-win32|windows-arm64|linux-generic-amd64|linux-generic-arm64|macos-universal|macosx-universal|macosx)\\.(?:zip|tar\\.xz|dmg))",
             Pattern.CASE_INSENSITIVE);
         private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL).build();
@@ -99,19 +100,21 @@ public final class ReleaseService {
         String assetSuffix = platformAssetSuffix();
         if (channel == ReleaseChannel.JGRPP) return parseJgrRelease(response.body(), assetSuffix);
         Matcher matcher = ASSET.matcher(response.body());
-        URI download = null;
-        String assetName = null;
+        ReleaseInfo best = null; int rank = Integer.MAX_VALUE;
         while (matcher.find()) {
-            if (matcher.group(2).toLowerCase(java.util.Locale.ROOT).contains("-" + assetSuffix + ".")) {
-                download = URI.create(matcher.group(0));
-                assetName = matcher.group(2);
-                break;
+            String name = matcher.group(2);
+            for (String variant : platformVariants(assetSuffix)) {
+                for (String extension : extensions(assetSuffix)) {
+                    String suffix = "-" + variant + extension;
+                    if (!name.endsWith(suffix)) continue;
+                    String version = name.substring("openttd-".length(), name.length() - suffix.length());
+                    int candidate = assetRank(name, "openttd-" + version + "-", assetSuffix);
+                    if (candidate < rank) { best = new ReleaseInfo(channel, version, URI.create(matcher.group(0)), channel.metadataUrl()); rank = candidate; }
+                }
             }
         }
-        if (download == null) throw new IOException("No official " + platformDisplayName() + " release archive was published on the page");
-        String suffix = "-" + assetSuffix + (assetName.endsWith(".tar.xz") ? ".tar.xz" : assetName.endsWith(".dmg") ? ".dmg" : ".zip");
-        String version = assetName.substring("openttd-".length(), assetName.length() - suffix.length());
-        return new ReleaseInfo(channel, version, download, channel.metadataUrl());
+        if (best == null) throw new IOException("No compatible " + assetSuffix + " archive was published on the release page");
+        return best;
     }
 
     static ReleaseInfo parseJgrRelease(String body, String platform) throws IOException {
@@ -120,17 +123,21 @@ public final class ReleaseService {
             String tag = release.get("tag_name").getAsString();
             if (!tag.matches("jgrpp-[0-9][A-Za-z0-9._+-]*")) throw new IOException("Unrecognized JGR release tag: " + tag);
             String version = tag.substring("jgrpp-".length());
-            String prefix = "openttd-jgrpp-" + version + "-" + platform;
+            String prefix = "openttd-jgrpp-" + version + "-";
+            ReleaseInfo best = null; int rank = Integer.MAX_VALUE;
             for (var element : release.getAsJsonArray("assets")) {
                 var asset = element.getAsJsonObject();
                 String name = asset.get("name").getAsString();
-                if (!supportedAsset(name, prefix, platform)) continue;
+                int candidate = assetRank(name, prefix, platform);
+                if (candidate >= rank) continue;
                 URI download = URI.create(asset.get("browser_download_url").getAsString());
                 String expected = "https://github.com/JGRennison/OpenTTD-patches/releases/download/" + tag + "/" + name;
                 if (!download.toString().equals(expected)) throw new IOException("Unexpected JGR download address");
-                return new ReleaseInfo(ReleaseChannel.JGRPP, version, download,
+                rank = candidate;
+                best = new ReleaseInfo(ReleaseChannel.JGRPP, version, download,
                         "https://github.com/JGRennison/OpenTTD-patches/releases/tag/" + tag);
             }
+            if (best != null) return best;
             throw new IOException("JGR Patch Pack has no supported archive download for " + platform
                     + ". Check github.com/JGRennison/OpenTTD-patches/releases for manual installation options.");
         } catch (RuntimeException malformed) {
@@ -138,16 +145,36 @@ public final class ReleaseService {
         }
     }
 
-    private static boolean supportedAsset(String name, String prefix, String platform) {
-        return name.equals(prefix + ".zip") || name.equals(prefix + ".tar.xz")
-                || (platform.startsWith("macos-") && name.equals(prefix + ".dmg"));
+    private static java.util.List<String> platformVariants(String platform) {
+        return switch (platform) {
+            case "macos-universal" -> java.util.List.of("macos-universal", "macosx-universal", "macosx");
+            case "windows-win64" -> java.util.List.of("windows-win64", "windows-win32");
+            default -> java.util.List.of(platform);
+        };
+    }
+
+    private static java.util.List<String> extensions(String platform) {
+        return platform.startsWith("macos") ? java.util.List.of(".dmg", ".zip")
+                : platform.startsWith("windows") ? java.util.List.of(".zip") : java.util.List.of(".tar.xz", ".zip");
+    }
+
+    private static int assetRank(String name, String prefix, String platform) {
+        int rank = 0;
+        for (String variant : platformVariants(platform)) {
+            for (String extension : extensions(platform)) {
+                if (name.equals(prefix + variant + extension)) return rank;
+                rank++;
+            }
+        }
+        return Integer.MAX_VALUE;
     }
 
     private static String platformAssetSuffix() throws IOException {
         String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
         String architecture = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
         if (os.equals("darwin")) return "macos-universal";
-        if (os.contains("win")) return architecture.contains("aarch64") || architecture.contains("arm64") ? "windows-arm64" : "windows-win64";
+        if (os.contains("win")) return architecture.contains("aarch64") || architecture.contains("arm64") ? "windows-arm64"
+                : architecture.equals("x86") || architecture.matches("i[3-6]86") ? "windows-win32" : "windows-win64";
         if (os.contains("mac") || os.contains("darwin")) return "macos-universal";
         if (os.contains("linux")) return architecture.contains("aarch64") || architecture.contains("arm64") ? "linux-generic-arm64" : "linux-generic-amd64";
         throw new IOException("Unsupported operating system: " + os);

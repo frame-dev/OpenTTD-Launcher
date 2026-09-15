@@ -54,3 +54,11 @@ These files are cached under `<install directory>/ttd-data` and copied beside th
 ## Tests
 
 Run `mvn test` to check version selection, channel isolation, repair success and failure, and rejection of unsafe archive paths. Most installation tests use a local HTTP server and temporary folders. On macOS, integration tests also create and mount a test DMG and download/install the published JGR 0.73.2 DMG into a temporary folder. No tests modify your installed game. GitHub Actions runs the suite on Windows, Linux, and macOS.
+
+## Platform compatibility
+
+The launcher recognizes current `macos-universal` and historical `macosx-universal` / `macosx` packages. On macOS, ZIP extraction uses `ditto` to preserve application permissions and links; DMGs use the mounted-bundle workflow. Nested app bundles are detected. Native Mac validation rejects PowerPC/32-bit-only binaries with an explanation, since modern macOS cannot run them. Older Intel-only 64-bit releases on Apple Silicon may require Rosetta and may have other operating-system limitations.
+
+Windows x64 prefers 64-bit ZIPs and falls back to 32-bit ZIPs for early releases. Windows x86 and ARM64 select their own architecture; ARM64 does not silently install a different architecture.
+
+A September 2026 snapshot of 241 official Stable/Testing release directories is covered by the archive-selection tests: 234 publish recognized Windows ZIPs and 214 publish recognized Mac archives. This validates download selection, not gameplay compatibility for every historical binary. Some early Windows releases publish only installers, some releases have no Mac build, and old operating-system dependencies cannot be supplied by the launcher. Native CI installs official 15.3 and 1.5.3 on Windows/macOS, plus Windows 0.3.6 and the JGR Mac DMG. The current Mac binary is also checked using its help command.

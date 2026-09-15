@@ -55,7 +55,20 @@ public final class MacDmgInstaller {
         }
     }
 
-    private static void run(List<String> arguments) throws IOException, InterruptedException {
+    static void extractZip(Path archive, Path target) throws IOException, InterruptedException {
+        run(List.of("/usr/bin/ditto", "-x", "-k", archive.toAbsolutePath().toString(), target.toAbsolutePath().toString()));
+    }
+
+    static void validateExecutable(Path executable) throws IOException, InterruptedException {
+        if (appBundle(executable) == null) return;
+        String architectures = run(List.of("/usr/bin/lipo", "-archs", executable.toString()));
+        if (!architectures.contains("x86_64") && !architectures.contains("arm64")) {
+            throw new IOException("This OpenTTD release contains only legacy Mac code (" + architectures.trim()
+                    + "). Modern macOS cannot run 32-bit or PowerPC applications. Choose a newer release.");
+        }
+    }
+
+    private static String run(List<String> arguments) throws IOException, InterruptedException {
         Path output = Files.createTempFile("openttd-macos-command-", ".log");
         Process process = null;
         try {
@@ -63,6 +76,7 @@ public final class MacDmgInstaller {
             process.getOutputStream().close();
             if (!process.waitFor(120, TimeUnit.SECONDS)) throw new IOException(arguments.getFirst() + " timed out");
             if (process.exitValue() != 0) throw new IOException(arguments.getFirst() + " failed: " + Files.readString(output));
+            return Files.readString(output);
         } finally {
             if (process != null && process.isAlive()) { process.destroyForcibly(); process.waitFor(); }
             Files.deleteIfExists(output);
