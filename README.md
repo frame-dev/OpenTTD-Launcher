@@ -4,7 +4,7 @@ A small Java 21/Swing launcher for official OpenTTD releases and JGR's Patch Pac
 
 ## Download and launch
 
-Extract the binary ZIP from [Releases](https://github.com/frame-dev/OpenTTD-Launcher/releases). Run `launch.bat` on Windows or `sh launch.sh` on macOS/Linux. Java 21 or newer with desktop support must be available as `java`. Maven is only required to build from source. Packages are unsigned and do not bundle Java.
+Choose the Windows, macOS, or Linux ZIP from [Releases](https://github.com/frame-dev/OpenTTD-Launcher/releases). Extract it, then run `launch.bat` on Windows, `launch.command` on macOS, or `sh launch.sh` on macOS/Linux. Java 21 or newer with desktop support must be available as `java`. Maven is only required to build from source. Packages are unsigned and do not bundle Java.
 
 This is an independent project, not an official OpenTTD distribution.
 
@@ -19,7 +19,7 @@ This is an independent project, not an official OpenTTD distribution.
 
 ```powershell
 mvn clean package
-java -jar target/openttd-launcher-1.0.0.jar
+java -jar target/openttd-launcher-1.0.1.jar
 ```
 
 On Windows, `scripts\\build.bat` builds the JAR and `scripts\\run.bat` starts it. On macOS/Linux, run `sh scripts/build.sh` and `sh scripts/run.sh`.

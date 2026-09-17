@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.openttd</groupId>
     <artifactId>openttd-launcher</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>OpenTTD Launcher</name>
     <description>Independent desktop launcher for OpenTTD and JGR Patch Pack.</description>
     <url>https://github.com/frame-dev/OpenTTD-Launcher</url>

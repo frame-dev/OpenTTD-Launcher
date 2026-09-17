@@ -23,7 +23,26 @@ try {
     }
     "@echo off`r`ncd /d `"%~dp0`"`r`njava -jar launcher.jar`r`nif errorlevel 1 pause`r`n" | Set-Content -LiteralPath "$binary/launch.bat" -Encoding ascii
     '#!/bin/sh' + "`n" + 'cd -- "$(dirname -- "$0")" || exit 1' + "`n" + 'exec java -jar launcher.jar' + "`n" | Set-Content -LiteralPath "$binary/launch.sh" -NoNewline -Encoding utf8
-    Compress-Archive -Path $binary.FullName -DestinationPath "$release/$name-bin.zip"
+    foreach ($platform in @('windows', 'macos', 'linux')) {
+        $platformRoot = New-Item -ItemType Directory -Path "target/platform-$platform/$name"
+        Get-ChildItem -LiteralPath $binary.FullName | Where-Object { $_.Name -notin @('launch.bat', 'launch.sh') } | Copy-Item -Destination $platformRoot -Recurse
+        if ($platform -eq 'windows') {
+            Copy-Item -LiteralPath "$binary/launch.bat" -Destination $platformRoot
+        } else {
+            Copy-Item -LiteralPath "$binary/launch.sh" -Destination $platformRoot
+            if ($platform -eq 'macos') { Copy-Item -LiteralPath "$binary/launch.sh" -Destination "$platformRoot/launch.command" }
+        }
+        $zipPath = "$release/$name-$platform.zip"
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($platformRoot.Parent.FullName, $zipPath)
+        if ($platform -ne 'windows') {
+            $zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Update)
+            try {
+                foreach ($entry in $zip.Entries) {
+                    if ($entry.FullName.EndsWith('.sh') -or $entry.FullName.EndsWith('.command')) { $entry.ExternalAttributes = (0x81ED -shl 16) }
+                }
+            } finally { $zip.Dispose() }
+        }
+    }
     # ZipFile includes .github and .gitignore on Unix, unlike Compress-Archive.
     [System.IO.Compression.ZipFile]::CreateFromDirectory($source.FullName, "$release/$name-source.zip")
     Get-ChildItem -LiteralPath $release -Filter '*.zip' | Sort-Object Name | ForEach-Object {
